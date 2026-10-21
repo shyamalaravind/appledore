@@ -1,0 +1,16 @@
+{
+  "$schema": "https://www.schemastore.org/claude-code-marketplace.json",
+  "name": "appledore",
+  "description": "appledore: build your Obsidian vault while you learn.",
+  "owner": {
+    "name": "Shyamal Aravind"
+  },
+  "plugins": [
+    {
+      "name": "appledore",
+      "description": "Plan a topic as a learning graph, read it one bite-sized subtopic at a time, and file every answer into your Obsidian vault.",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}
