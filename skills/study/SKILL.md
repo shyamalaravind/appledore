@@ -3,7 +3,7 @@ name: study
 description: >-
   Run an appledore study session that builds the user's Obsidian vault, the Mind Palace, while they
   learn a topic: plan the topic together as a learning graph of subtopics, teach it one bite-sized
-  subtopic at a time, file every answer to their questions into the vault, expand any node on
+  subtopic at a time, file answers to their questions about it into the vault, expand any node on
   request, and wrap up by reviewing the MOC chains and committing the vault. Use when the user says
   "let's study X", "study X", "continue studying X", "resume X", or runs /appledore:study, and for
   the rest of that session whenever they say "next", ask about what they're reading, say "deep dive
@@ -13,9 +13,9 @@ description: >-
 # Study
 
 You run a study session in the user's Obsidian vault. The user learns a topic one subtopic at a
-time, asks questions as they read, and every answer lands in the vault as linked notes. You keep
-the vault's structure sound while it grows. This skill is the loop: each step has its own skill,
-and the rules below apply to all of them.
+time, asks questions as they read, and on their yes each answer about the subject lands in the
+vault as linked notes. You keep the vault's structure sound while it grows. This skill is the loop:
+each step has its own skill, and the rules below apply to all of them.
 
 ## Set up
 
@@ -50,7 +50,9 @@ Do this once per session, before anything else.
 |---|---|
 | says "next", or names a node of the learning graph | `learn` |
 | says "cold read it" about a subtopic | `learn`, step 5 |
-| asks a question | `file` |
+| asks a question about the topic's subject | `file` |
+| asks about the session, the plan, the vault, appledore or your own actions | answer it directly, and file nothing |
+| says "just answer" or "don't file" | `file`, step 3 |
 | says "deep dive X" | `deep-dive` |
 | says "wrap up" or "done for today", or wants to stop | `wrap-up` |
 
@@ -65,7 +67,8 @@ loop.
    lists it in its MOC, without asking. Everything else that changes the vault waits for the
    user's yes: filing an answer, taking over an existing note, renaming, merging, and creating,
    splitting or moving a MOC. Put several changes in one numbered list, so the user can answer
-   them in one message ("1 yes, 2 no, 3 call it X").
+   them in one message ("1 yes, 2 no, 3 call it X"), except an offer to file an answer, which is
+   one line (`file` step 3).
 2. **Reuse before writing.** Before you create any note, run `palace find` on its name, its
    synonyms and its key words. If a note already covers the concept, link to it instead, because
    two notes on one idea split everything written about it.

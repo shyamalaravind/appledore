@@ -1,6 +1,6 @@
 # appledore, for agents
 
-appledore builds the user's Obsidian vault while they learn a topic. You plan the topic with them as a learning graph, teach it one bite-sized subtopic at a time, file every answer to their questions into the vault, and review and commit the vault at the end.
+appledore builds the user's Obsidian vault while they learn a topic. You plan the topic with them as a learning graph, teach it one bite-sized subtopic at a time, file the answers to their questions about it into the vault on their yes, and review and commit the vault at the end.
 
 ## Run a study session
 

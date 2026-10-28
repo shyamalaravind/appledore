@@ -8,7 +8,7 @@ The layout appledore expects: the folders, properties, templates and invariants 
 2. **Every note in `_Main Notes/` has a `type`:** `topic` (the root of a learning graph), `subtopic` (one node of a learning graph: what you read in one sitting, as one note or a few) or `note` (everything else).
 3. **`mocs` is the only record of where a note sits.** It is a list of links that points up only. Nobody writes child lists by hand: a MOC shows its children by embedding `Children.base`.
 4. **`builds_on` is the only record of reading order.** It lists direct prerequisites only, never the note's own `mocs` parent. A topic's *Learning graph* section is drawn from it by `palace.py graph` and never edited by hand.
-5. **A subtopic's `mocs` is its topic note.** A part split off a subtopic points to that subtopic, and a stub points to the note that left it out, so a learning graph's depth never stretches the MOC chains. A stub for a subtopic that is planned but not written yet points to the topic note and carries its `builds_on`, so the graph is drawn in full before anything is written.
+5. **A subtopic's `mocs` is its topic note.** A child note that holds part of a subtopic points to that subtopic, and a stub points to the note that left it out, so a learning graph's depth never stretches the MOC chains. A stub for a subtopic that is planned but not written yet points to the topic note and carries its `builds_on`, so the graph is drawn in full before anything is written.
 6. **A MOC never teaches.** It holds a `summary`, an optional "Start here" link and its embedded Bases. A definition or a table makes a hub into a note, which can still have children.
 7. **MOC sizes:** create a MOC when five or more notes would sit under it, dissolve it at two or fewer children, and split it past about 30. MOC titles end in " MOC". At most two MOC levels sit above a topic, and root MOCs have no `mocs`.
 8. **A note has at most two parents:** one concept parent and one context parent (a vendor or a company), the concept parent first. Subtopics and stubs have exactly one.
@@ -18,7 +18,7 @@ The layout appledore expects: the folders, properties, templates and invariants 
 12. **Sideways links go in the body, at the first mention,** and the line says what the relation is. There are no Related or See also sections.
 13. **Each note ends with `## Sources`:** links to the pages it was built from. Nothing is pasted, and an AI chat is never a source.
 14. **There are no empty files.** The smallest note is a stub: a `summary` plus `mocs`. Flows are written as text arrows or Mermaid; there are no handwritten drawings.
-15. **A question asked while learning is answered inside one or more topic or subtopic notes.** When it fits none of them, it becomes a new subtopic. There are no question notes.
+15. **An answer filed while learning goes inside one or more topic or subtopic notes.** When it fits none of them, it becomes a new subtopic. There are no question notes.
 16. **DSA problems point through `mocs` to their pattern notes.** A problem's takeaway is its `summary` and its page is its `url`; the statement isn't copied.
 17. **Company notes get a context parent, a `<Company> MOC`,** created with the first company note.
 
