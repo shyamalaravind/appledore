@@ -105,11 +105,14 @@ plugin's `cold-reader` agent.
 
 Do this straight after step 4. Step 5 runs only later, on request.
 
-In a few lines:
+Open it with `palace open "<title>"` (its main note, if it spans notes), then in a few lines:
 
 - the note's `obsidian://` link (several, if it spans notes);
 - the new concepts it teaches, in one line;
-- the stubs it left out, as links;
+- the stubs it left out, as links. If `palace next "<topic>"` now shows nothing planned, this was
+  the last planned node: give the topic's whole list instead, as
+  `palace next "<topic>" --left-out` prints it (each stub linked, with its summary, under the
+  note that left it out), and end with how to pick one: "deep dive <stub>";
 - the new-concept question (the `study` skill's rule 3), if any concepts are waiting.
 
 Then wait. The user reads, and comes back with "next", a question, a deep dive, or a request for

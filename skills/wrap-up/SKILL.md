@@ -35,8 +35,9 @@ navigate, which a big clean-up months later can't.
 - **Duplicates:** `palace find` on each new note's title, aliases and key words. Two notes on one
   concept are merged.
 - **Orphans:** the notes `palace tree` lists outside every chain.
-- **A finished topic:** `palace next "<topic>"` shows no planned stubs left. Ask whether its
-  `status` becomes `done`. The stubs left out don't count, because they wait for a deep dive.
+- **A finished topic:** `palace next "<topic>"` shows no planned stubs left, or the user says the
+  topic is done. Ask whether its `status` becomes `done`. The stubs left out don't count, because
+  they wait for a deep dive: the session ends with their list (step 4).
 
 ## 3. Propose, then apply
 
@@ -53,4 +54,6 @@ Then `palace check` must show no errors. If nothing needs changing, say so in on
 3. `git -C "<vault>" push`. If the push fails, say why, and leave the commit in place.
 
 End with one line: what the session added (notes written, answers filed, stubs added) and what's
-ready next.
+ready next. For a finished topic, follow it with the topic's stubs to explore, as
+`palace next "<topic>" --left-out` prints them (each linked, with its summary, under the note that
+left it out), and end with how to pick one: "deep dive <stub>".

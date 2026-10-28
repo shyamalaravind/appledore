@@ -51,4 +51,5 @@ Give a numbered list the user can answer per item:
    `palace graph "<topic>" --write`, and use `learn` to write it.
 4. `palace check`.
 
-Then give the links of the notes that changed, and wait for the user's next message.
+Then open the note to read first with `palace open`, give the links of the notes that changed,
+and wait for the user's next message.

@@ -44,7 +44,8 @@ Ask the user which they want:
 
 - **Write X now** as an ordinary note: `type: note`, in their bullet style (a `summary`, then
   bullets, then Sources), written to `writing-rules.md`'s rules for ordinary notes. A stub moves to
-  `_Main Notes/` first, with `palace mv "X" "_Main Notes/"`.
+  `_Main Notes/` first, with `palace mv "X" "_Main Notes/"`. Then open it with `palace open "X"`,
+  and give its link.
 - **Make X a topic** of its own, in place: X keeps its name and links. Use `plan` with X as the
   topic. The topic note is X itself: a stub moves to `_Main Notes/` first, and an ordinary note's
   content is cut down to the Overview, with the rest becoming planned subtopics.

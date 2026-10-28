@@ -96,5 +96,8 @@ loop.
    link becomes `[[A|B]]`), delete B, and run `palace check`.
 7. **The user reads in Obsidian.** Never paste a note's text into the chat. Give its link:
    `obsidian://open?vault=<vault folder name>&file=<path inside the vault, without .md>`, with
-   both values URL-encoded (`Mind%20palace`, `_Main%20Notes%2FBlob%20tiers`).
+   both values URL-encoded (`Mind%20palace`, `_Main%20Notes%2FBlob%20tiers`). After a step
+   writes a note for the user to read, open it with `palace open "<note>"`, which also prints
+   that link, and still give the link, because a host with no desktop can't open it. When a step
+   writes several notes, open only the one to read first.
 8. **Git.** Commit and push the vault only in `wrap-up`. Never touch git history.
