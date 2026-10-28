@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import unicodedata
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -196,6 +197,18 @@ class QueryTests(VaultTest):
         out, _ = self.run_cli("next", "Service Bus", "--left-out")
         self.assertEqual(out, "Service Bus: no stubs left out\n")
 
+    def test_next_left_out_lists_a_stub_once_and_only_the_topics_own(self):
+        self.small_vault()
+        self.write("Stubs/AMQP.md", note("The wire protocol.", ["Queue", "Peek-lock"]))  # under its first parent only
+        self.write("_Main Notes/Event Grid.md", note("Another topic.", ["Azure MOC"], type="topic", status="learning"))
+        self.write("_Main Notes/Push delivery.md", note("Push.", ["Event Grid"], type="subtopic", builds_on=[]))
+        self.write("Stubs/Webhooks.md", note("How does Event Grid call you?", ["Push delivery"]))
+        out, _ = self.run_cli("next", "Service Bus", "--left-out")
+        link = "obsidian://open?vault=Mind%20palace&file="
+        self.assertEqual(out, "Service Bus: 1 stub left out by 1 note\n"
+                              f"- Left out by [Queue]({link}_Main%20Notes%2FQueue):\n"
+                              f"  - [AMQP]({link}Stubs%2FAMQP): The wire protocol.\n")
+
     def test_graph_write_replaces_only_its_section(self):
         self.small_vault()
         self.run_cli("graph", "Service Bus", "--write")
@@ -276,10 +289,11 @@ class MoveTests(VaultTest):
 
 
 class OpenTests(VaultTest):
-    """palace open builds the commands; subprocess.run is mocked, so nothing launches."""
+    """palace open builds the commands; subprocess.run and Popen are mocked, so nothing launches."""
 
     LINK = "obsidian://open?vault=Mind%20palace&file=_Main%20Notes%2FPeek-lock"
     CLI_OPEN = ["obsidian", "vault=Mind palace", "open", "path=_Main Notes/Peek-lock.md"]
+    HANGS = object()
 
     def setUp(self):
         super().setUp()
@@ -287,26 +301,58 @@ class OpenTests(VaultTest):
         env = mock.patch.dict(palace.os.environ)
         env.start()
         self.addCleanup(env.stop)
-        palace.os.environ.pop("PALACE_OPEN", None)
+        for name in ("PALACE_OPEN", "DISPLAY", "WAYLAND_DISPLAY"):
+            palace.os.environ.pop(name, None)
 
-    def open(self, outputs=None, which=("obsidian", "open", "xdg-open"), platform="darwin"):
-        """Run palace open with the given programs on PATH; outputs maps a program to its stdout,
-        or to None for a nonzero exit. Returns (stdout lines, the commands run)."""
-        outputs = outputs or {}
+    def open(self, outputs=None, which=("obsidian", "open", "xdg-open"), platform="darwin", name="Peek-lock"):
+        """Run palace open with the given programs on PATH; outputs maps a program to its stdout, to
+        None for a nonzero exit, or to HANGS for one still running at the timeout. Returns (stdout
+        lines, the commands run); self.opener_kwargs holds how the system's opener was started."""
+        outputs, commands = outputs or {}, []
+
+        def result(command):
+            commands.append(command)
+            return outputs.get(command[1] if command[0] == "obsidian" else command[0], "")
 
         def fake_run(command, **kwargs):
-            out = outputs.get(command[1] if command[0] == "obsidian" else command[0], "")
+            out = result(command)
+            if out is self.HANGS:
+                raise subprocess.TimeoutExpired(command, kwargs.get("timeout"))
             return subprocess.CompletedProcess(command, 1 if out is None else 0, out or "", "")
 
+        def fake_popen(command, **kwargs):
+            self.opener_kwargs = kwargs
+            out, process = result(command), mock.Mock()
+            if out is self.HANGS:
+                process.wait.side_effect = subprocess.TimeoutExpired(command, 5)
+            else:
+                process.wait.return_value = 1 if out is None else 0
+            return process
+
         with mock.patch.object(palace.shutil, "which", lambda name: f"/bin/{name}" if name in which else None), \
-                mock.patch.object(palace.subprocess, "run", side_effect=fake_run) as run, \
+                mock.patch.object(palace.subprocess, "run", side_effect=fake_run), \
+                mock.patch.object(palace.subprocess, "Popen", side_effect=fake_popen), \
                 mock.patch.object(palace.sys, "platform", platform):
-            out, code = self.run_cli("open", "Peek-lock")
+            out, code = self.run_cli("open", name)
         self.assertEqual(code, 0, out)
-        return out.splitlines(), [c.args[0] for c in run.call_args_list]
+        return out.splitlines(), commands
 
     def test_the_link_is_url_encoded(self):
         self.assertEqual(palace.obsidian_uri(self.vault(), self.vault().get("Peek-lock")), self.LINK)
+        root = Path(self.tmp.name) / "Notes & ideas #2"
+        (root / "_Main Notes").mkdir(parents=True)
+        (root / "_Main Notes/Café + tea & 100% = yes.md").write_text(note("x", ["A"], type="note"), encoding="utf-8")
+        v = palace.Vault(root)
+        self.assertEqual(palace.obsidian_uri(v, v.get("Café + tea & 100% = yes")),
+                         "obsidian://open?vault=Notes%20%26%20ideas%20%232"
+                         "&file=_Main%20Notes%2FCaf%C3%A9%20%2B%20tea%20%26%20100%25%20%3D%20yes")
+
+    def test_the_cli_gets_the_path_obsidian_keys_the_note_by(self):
+        decomposed = unicodedata.normalize("NFD", "Café")  # how some tools write é to disk
+        self.write(f"_Main Notes/{decomposed}.md", note("c", ["Service Bus"], type="note"))
+        _, commands = self.open({"version": "1.14.5", "vault=Mind palace": "Opened: _Main Notes/Café.md"},
+                                name=decomposed)
+        self.assertEqual(commands[1], ["obsidian", "vault=Mind palace", "open", "path=_Main Notes/Caf\u00e9.md"])
 
     def test_the_cli_first(self):
         lines, commands = self.open({"version": "1.14.5 (installer 1.14.5)",
@@ -321,8 +367,19 @@ class OpenTests(VaultTest):
         self.assertEqual(lines, [self.LINK, "opened through the obsidian:// link"])
         _, commands = self.open({"version": "1.14.5", "vault=Mind palace": "Vault not found."})
         self.assertEqual(commands, [["obsidian", "version"], self.CLI_OPEN, ["open", self.LINK]])
+        _, commands = self.open({"version": self.HANGS})
+        self.assertEqual(commands, [["obsidian", "version"], ["open", self.LINK]])
+        palace.os.environ["WAYLAND_DISPLAY"] = "wayland-0"
         _, commands = self.open(which=("xdg-open",), platform="linux")
         self.assertEqual(commands, [["xdg-open", self.LINK]])
+
+    def test_the_opener_runs_detached_and_may_stay_in_the_foreground(self):
+        # An app the opener starts would otherwise hold its output open until the timeout.
+        palace.os.environ["DISPLAY"] = ":0"
+        lines, _ = self.open({"xdg-open": self.HANGS}, which=("xdg-open",), platform="linux")
+        self.assertEqual(self.opener_kwargs, {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,
+                                              "stderr": subprocess.DEVNULL, "start_new_session": True})
+        self.assertEqual(lines[1], "opened through the obsidian:// link")
 
     def test_windows_uses_start(self):
         with mock.patch.object(palace.os, "startfile", create=True) as startfile:
@@ -335,11 +392,22 @@ class OpenTests(VaultTest):
         lines, commands = self.open()
         self.assertEqual((lines, commands), ([self.LINK, "not opened: PALACE_OPEN=0"], []))
         del palace.os.environ["PALACE_OPEN"]
+        lines, commands = self.open(which=("xdg-open",), platform="linux")  # no desktop
+        self.assertEqual((lines, commands), ([self.LINK, "not opened: no desktop (DISPLAY and WAYLAND_DISPLAY are unset)"], []))
+        palace.os.environ["DISPLAY"] = ":0"
         lines, _ = self.open(which=(), platform="linux")
         self.assertEqual(lines[0], self.LINK)
         self.assertTrue(lines[1].startswith("not opened"))
         lines, _ = self.open({"version": None, "open": None})
         self.assertTrue(lines[1].startswith("not opened"))
+        with mock.patch.object(palace.os, "startfile", create=True, side_effect=OSError):
+            lines, _ = self.open(which=(), platform="win32")
+        self.assertTrue(lines[1].startswith("not opened"))
+
+    def test_a_reply_that_isnt_utf_8_or_never_comes(self):
+        reply = [sys.executable, "-c", "import sys; sys.stdout.buffer.write(b'Opened: \\x81')"]
+        self.assertEqual(palace.try_run(reply), "Opened: \ufffd")
+        self.assertIsNone(palace.try_run([sys.executable, "-c", "import time; time.sleep(10)"], timeout=0.2))
 
 
 if __name__ == "__main__":

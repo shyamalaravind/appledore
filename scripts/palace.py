@@ -31,6 +31,7 @@ import re
 import shutil
 import subprocess
 import sys
+import unicodedata
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote
 
@@ -1054,10 +1055,25 @@ def cmd_mv(vault: Vault, args):
 def try_run(command, timeout=15):
     """A command's output, or None when it can't start, fails or hangs."""
     try:
-        done = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
+        done = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", timeout=timeout)
     except (OSError, subprocess.SubprocessError):
         return None
     return done.stdout.strip() if done.returncode == 0 else None
+
+
+def start_opener(command, wait=5) -> bool:
+    """Hand a link to the system's opener, detached from this process and its output, because an
+    app the opener starts would hold captured output open. True when the opener exits 0, or is
+    still running after `wait` seconds, as xdg-open is while an app it started runs."""
+    try:
+        process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL, start_new_session=True)
+    except OSError:
+        return False
+    try:
+        return process.wait(timeout=wait) == 0
+    except subprocess.TimeoutExpired:
+        return True
 
 
 def open_in_obsidian(vault: Vault, note: Note) -> str:
@@ -1067,7 +1083,8 @@ def open_in_obsidian(vault: Vault, note: Note) -> str:
     # The CLI answers even when it is turned off (Settings → General → Advanced), so a
     # version number is what says it's on, and "Opened: <path>" that the open worked.
     if shutil.which("obsidian") and re.match(r"\d", try_run(["obsidian", "version"]) or ""):
-        out = try_run(["obsidian", f"vault={vault.root.name}", "open", f"path={note.rel}"])
+        path = unicodedata.normalize("NFC", str(note.rel))  # Obsidian keys its files by NFC paths
+        out = try_run(["obsidian", f"vault={vault.root.name}", "open", f"path={path}"])
         if out and out.startswith("Opened"):
             return "opened through the Obsidian command line interface"
     uri = obsidian_uri(vault, note)
@@ -1079,7 +1096,9 @@ def open_in_obsidian(vault: Vault, note: Note) -> str:
             pass
     else:
         opener = "open" if sys.platform == "darwin" else "xdg-open"
-        if shutil.which(opener) and try_run([opener, uri]) is not None:
+        if opener == "xdg-open" and not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+            return "not opened: no desktop (DISPLAY and WAYLAND_DISPLAY are unset)"  # xdg-open would try a text browser
+        if shutil.which(opener) and start_opener([opener, uri]):
             return "opened through the obsidian:// link"
     return "not opened: neither the Obsidian command line interface nor the system's opener worked"
 
