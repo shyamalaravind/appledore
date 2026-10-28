@@ -25,7 +25,13 @@ For a learning graph's notes (topic notes, subtopics and passages filed into the
 
 ## A subtopic note
 
-7. **Teach at most three new concepts, in 150–450 words across the subtopic's notes.** A new subtopic usually needs 200–350. Use as few as the question needs, and never pad to reach the floor. A new concept is a term the reader doesn't know and the note keeps using. Bold it once, as the label of the bullet that defines it (`- **Proxy:** a server that …`). Bold nothing else except the labels in rule 8. When the sources show a new concept in a tool or a language, the bullet that defines it, or one under it, says where it lives there: each class, method, built-in or setting (in Java, a condition variable is `wait` and `notify` on any object, or a `Condition` from `lock.newCondition()`). Cut what the note's question doesn't need, such as name lengths, quotas and account limits: leave them out, or make them a Left out item. Because: working memory holds only three or four new things at once, and an interesting detail the question doesn't need hurts learning. A concept the reader can't find in their tool is one they can't use.
+7. **Teach at most three new concepts, in 150–450 words across the subtopic's notes.**
+   - A new subtopic usually needs 200–350 words. Use as few as the question needs, and never pad to reach the floor.
+   - A new concept is a term the reader doesn't know and the note keeps using. Bold it once, as the label of the bullet that defines it (`- **Proxy:** a server that …`). Bold nothing else except the labels in rule 8.
+   - When the sources show a new concept in a tool or a language, the bullet that defines it, or one under it, says where it lives there: each class, method, built-in or setting (in Java, a condition variable is `wait` and `notify` on any object, or a `Condition` from `lock.newCondition()`).
+   - Cut what the note's question doesn't need, such as name lengths, quotas and account limits: leave them out, or make them a Left out item.
+
+   Because: working memory holds only three or four new things at once, and an interesting detail the question doesn't need hurts learning. A concept the reader can't find in their tool is one they can't use.
 
 8. **Open with two labelled lines: the point, then the case.**
    - `**In short:**` One or two lines that give the note's point and name the problem it solves, so the line stands on its own. Never label it "Answer": the title is a concept, so there is no question on the page for it to answer. It may say what the `summary` says, in the problem's terms, but never copies it. A subtopic that changes an earlier flow says what the change fixes.
@@ -36,7 +42,7 @@ For a learning graph's notes (topic notes, subtopics and passages filed into the
 9. **Head each part, show why before how, and keep other signals rare.**
    - After the two lines, give each part a `##` heading naming what it explains, three at most.
    - When the subtopic's concept exists to get around a constraint, the first of the three parts is `## Why it exists`: the constraints in order, each with its because, ending with the concept as the way out.
-   - Trace a mechanism with two or more actors, such as threads or services, in numbered steps on the Example's case, nested under the bullet it shows: each step a text arrow of who holds or does what (`2. Worker: wait() lets go of the lock → sleeps`).
+   - Trace a mechanism with two or more actors, such as threads or services, in numbered steps on the Example's case, nested under the bullet it shows: each step a text arrow of who holds or does what (`2. Worker: wait() lets go of the lock → sleeps`). The numbers are an exception to rule 6's bullets.
    - Draw any other flow of three or more steps as a text arrow or Mermaid of at most six nodes, in the note's own words, nested under the bullet it shows.
    - Use at most one callout: a `> [!warning]` titled with the correction, after its section's bullets, for a trap. A trap is a wrong belief the reader probably holds that would cause a real mistake.
 

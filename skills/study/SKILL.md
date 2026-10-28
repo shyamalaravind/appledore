@@ -67,7 +67,8 @@ loop.
    lists it in its MOC, without asking. Everything else that changes the vault waits for the
    user's yes: filing an answer, taking over an existing note, renaming, merging, and creating,
    splitting or moving a MOC. Put several changes in one numbered list, so the user can answer
-   them in one message ("1 yes, 2 no, 3 call it X").
+   them in one message ("1 yes, 2 no, 3 call it X"), except an offer to file an answer, which is
+   one line (`file` step 3).
 2. **Reuse before writing.** Before you create any note, run `palace find` on its name, its
    synonyms and its key words. If a note already covers the concept, link to it instead, because
    two notes on one idea split everything written about it.
