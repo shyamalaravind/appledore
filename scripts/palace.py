@@ -79,6 +79,8 @@ LEGACY_IN_BODY = re.compile(r"^\*\*(?:MOCs|date|source|tags)\b", re.M | re.I)
 HEADING = re.compile(r"^(#{1,6})[ \t]+(.*?)[ \t]*$", re.M)
 URL_LINK = re.compile(r"\[([^\[\]]*)\]\([^()\s]*\)")         # [text](url)
 WIKI_SHOWN = re.compile(r"!?\[\[(?:[^\[\]|]*\|)?([^\[\]|]*)\]\]")  # [[target|shown]] or [[target]]
+BARE_URL = re.compile(r"https?://\S+")
+SOURCES = re.compile(r"^## Sources\b.*?(?=^#{1,2}[ \t]|\Z)", re.M | re.S)
 BAD_TITLE_CHARS = set('\\/:#^[]|')
 
 
@@ -242,6 +244,17 @@ def mask(text: str) -> str:
     return "".join(chars)
 
 
+def blank_matches(pattern, text: str) -> str:
+    """Blank out every match of pattern, keeping every offset."""
+    return pattern.sub(lambda m: re.sub(r"[^\n]", " ", m.group()), text)
+
+
+def fold(text: str) -> str:
+    """Lowercase text without changing its length, so offsets in it still point into the original.
+    İ is the one letter whose lowercase is longer."""
+    return text.replace("İ", "I").lower()
+
+
 def split_inner(inner: str):
     """[[name#heading|display]] -> (name, heading or None, display or None)."""
     target, bar, display = inner.partition("|")
@@ -330,6 +343,15 @@ class Note:
         body = WIKI_SHOWN.sub(r"\1", URL_LINK.sub(r"\1", body))
         return len(re.findall(r"[^\s#*\->|`]+", body))
 
+    def prose(self) -> str:
+        """The text with all but the body's prose blanked, keeping every offset: frontmatter, code,
+        comments, links, embeds, URLs, headings and the Sources section."""
+        start = len(self.text) - len(self.body)
+        text = re.sub(r"[^\n]", " ", self.text[:start]) + mask(self.text)[start:]
+        for pattern in (SOURCES, HEADING, LINK, URL_LINK, BARE_URL):
+            text = blank_matches(pattern, text)
+        return text
+
 
 class Vault:
     def __init__(self, root):
@@ -351,6 +373,7 @@ class Vault:
             self.by_title.setdefault(n.title.lower(), []).append(n)
             self.by_rel[str(n.rel).lower()] = n
         self._resolved, self._children, self._dependants, self._backlinks = {}, None, None, None
+        self._names, self._name_pattern = None, None
 
     # -- lookups
 
@@ -436,6 +459,38 @@ class Vault:
                     if isinstance(target, Note):
                         self._backlinks.setdefault(id(target), []).append((n, link))
         return self._backlinks.get(id(note), [])
+
+    def unlinked_mentions(self, note: Note) -> list:
+        """Every other note the body names by title or alias but never links, as (target, name as
+        written, line) at its first mention. A hyphen joins words, so "Lock-free" doesn't name a note
+        called Lock. A one-word name matches only in its own capitalisation, so the word "graph"
+        doesn't name a note called Graph; a longer name matches in any case."""
+        if self._names is None:
+            self._names = {}  # a one-word name as written, a longer one lowercased
+            for n in self.notes:
+                if n.kind != "root":
+                    for name in [n.title] + n.aliases:
+                        key = " ".join(name.split())
+                        if key:
+                            self._names.setdefault(key if " " not in key else key.lower(), n)
+            # Lowercased names grouped by their first letter, so the scan tries only the names that
+            # can start at each word, and stays fast however many notes the vault has.
+            groups = {}
+            for k in sorted({fold(k) for k in self._names}, key=len, reverse=True):  # the longest name wins
+                groups.setdefault(re.escape(k[0]), []).append(r"[ \t]+".join(map(re.escape, k[1:].split(" "))))
+            self._name_pattern = re.compile(r"(?<![\w-])(?:" + "|".join(
+                first + "(?:" + "|".join(rests) + ")" for first, rests in groups.items()) + r")(?![\w-])")
+        if not self._names:
+            return []
+        skip = {id(note)} | {id(p) for p in self.parents(note)} | {id(self.resolve(l.name)) for l in note.body_links()}
+        text, found = note.prose(), []
+        for m in self._name_pattern.finditer(fold(text)):  # a one-word name's case is checked below
+            written = " ".join(text[m.start():m.end()].split())
+            target = self._names.get(written if " " not in written else written.lower())
+            if target is not None and id(target) not in skip:
+                skip.add(id(target))
+                found.append((target, written, text.count("\n", 0, m.start()) + 1))
+        return found
 
     def roots(self) -> list:
         return [n for n in self.notes if n.kind == "moc" and not n.values("mocs")]
@@ -851,6 +906,8 @@ def check(vault: Vault):
                 warn(n, f"lists its parent {p.title!r} in builds_on")
             if isinstance(p, Note) and any(vault.resolve(l.name) is p for l in n.body_links() if not l.embed):
                 warn(n, f"links its parent {p.title!r} in the body; mocs already says it")
+        for target, written, line in vault.unlinked_mentions(n):
+            warn(n, f'mentions "{written}" (line {line}) but never links [[{target.title}]]')
 
         if n.kind == "stub":
             rest = re.split(r"^## Sources\b", n.body, maxsplit=1, flags=re.M)[0]
