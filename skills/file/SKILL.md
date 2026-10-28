@@ -16,7 +16,7 @@ This runs inside an appledore study session. If the `study` skill isn't loaded, 
 sets up `palace` and holds the rules every step follows.
 
 This step is only for a question about the subject of the topic being studied. Answer a question
-about the session, the plan, the vault, appledore or your own last step directly, and file nothing.
+about the session, the plan, the vault, appledore or your own actions directly, and file nothing.
 
 An answer about the subject belongs in the vault, because an answer that stays in the chat is lost
 when the session ends. There are no question notes: an answer goes inside the notes it extends, so
@@ -35,7 +35,8 @@ answer from memory, and agree a source with the user first, as the `study` skill
 
 ## 3. Offer to file it
 
-End the answer with one line the user can answer in a word, not a list:
+End the answer with one line the user can answer in a word, even when it names several notes,
+because a list to work through after every answer slows the loop:
 
 - **It extends one or more topic or subtopic notes:** "File this into [[Note]], under `## Section`?
   yes / no / elsewhere". It becomes a passage in each note: a bullet after the bullet it
@@ -43,9 +44,9 @@ End the answer with one line the user can answer in a word, not a list:
 - **It fits none of them:** "File this as a new subtopic, [[Title]], after [[Note]]? yes / no /
   elsewhere". It becomes a new subtopic in the learning graph, with `mocs` the topic and
   `builds_on` the note being read. `learn` writes it, around the question.
-- **The vault already answers it:** make no offer. Give that note's link with the answer, and link
-  the note from the line that raised the question, which needs no yes. If the user called the
-  concept by another name, ask in one line whether to add that name to the note's `aliases`.
+- **The vault already answers it:** make no filing offer. Give that note's link with the answer,
+  and link the note from the line that raised the question, which needs no yes. If the user called
+  the concept by another name, ask in one line whether to add that name to the note's `aliases`.
 
 On "elsewhere", ask where, or list the other places as numbered items. On "no", file nothing.
 

@@ -51,7 +51,8 @@ Do this once per session, before anything else.
 | says "next", or names a node of the learning graph | `learn` |
 | says "cold read it" about a subtopic | `learn`, step 5 |
 | asks a question about the topic's subject | `file` |
-| asks about the session, the plan, the vault, appledore or your last step | answer it directly, and file nothing |
+| asks about the session, the plan, the vault, appledore or your own actions | answer it directly, and file nothing |
+| says "just answer" or "don't file" | `file`, step 3 |
 | says "deep dive X" | `deep-dive` |
 | says "wrap up" or "done for today", or wants to stop | `wrap-up` |
 

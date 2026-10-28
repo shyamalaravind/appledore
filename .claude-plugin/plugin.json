@@ -1,7 +1,7 @@
 {
   "name": "appledore",
   "version": "0.1.0",
-  "description": "Build your Obsidian vault while you learn: plan a topic as a learning graph, read it one bite-sized subtopic at a time, and file every answer into the vault as linked notes.",
+  "description": "Build your Obsidian vault while you learn: plan a topic as a learning graph, read it one bite-sized subtopic at a time, and file every answer about it into the vault as linked notes.",
   "author": {
     "name": "Shyamal Aravind",
     "url": "https://github.com/shyamalaravind"
