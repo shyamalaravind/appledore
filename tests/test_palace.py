@@ -221,6 +221,67 @@ class CheckTests(VaultTest):
         self.assertTrue(any("50 words" in m for m in warnings))
         self.assertTrue(any("out of date" in m for m in warnings))
 
+    def mentions_vault(self, body):
+        self.small_vault()
+        self.run_cli("graph", "Service Bus", "--write")
+        self.write("Home.md", "# Home\n")
+        self.write("_Main Notes/Graph.md", note("Nodes and edges.", ["Azure MOC"], type="note"))
+        self.write("_Main Notes/Lock.md", note("One thread at a time.", ["Azure MOC"], type="note"))
+        self.write("_Main Notes/Blocking queue.md", note("Waits while empty.", ["Azure MOC"], type="note"))
+        self.write("_Main Notes/Service Bus queue.md", note("A queue in Service Bus.", ["Azure MOC"], type="note"))
+        self.write("_Main Notes/Dead-letter queue.md", note("Dead letters.", ["Azure MOC"], type="note", aliases=["DLQ"]))
+        self.write("_Main Notes/Message queues.md", note("Queues and their Dead-letter queue.", ["Azure MOC"], type="note")
+                   + textwrap.dedent(body))
+        _, warnings = palace.check(self.vault())
+        return [(rel, m) for rel, m in warnings if "never links" in m]
+
+    def test_unlinked_mention_warns_once_at_its_first_mention(self):
+        mentions = self.mentions_vault("""\
+            ## Why a dead-letter queue
+            - A message that keeps failing moves to the dead-letter queue.
+            - The DLQ keeps it until you read it.
+            - A Graph of the flow helps.
+            """)
+        self.assertEqual(mentions, [
+            ("_Main Notes/Message queues.md", 'mentions "dead-letter queue" (line 9) but never links [[Dead-letter queue]]'),
+            ("_Main Notes/Message queues.md", 'mentions "Graph" (line 11) but never links [[Graph]]'),
+        ])
+
+    def test_an_alias_counts_and_the_longest_name_wins(self):
+        mentions = self.mentions_vault("""\
+            - The DLQ keeps a message that keeps failing.
+            - Each Service Bus queue has its own.
+            """)
+        self.assertEqual(mentions, [
+            ("_Main Notes/Message queues.md", 'mentions "DLQ" (line 8) but never links [[Dead-letter queue]]'),
+            ("_Main Notes/Message queues.md", 'mentions "Service Bus queue" (line 9) but never links [[Service Bus queue]]'),
+        ])
+
+    def test_hyphenated_compounds_dont_name_a_note(self):
+        mentions = self.mentions_vault("""\
+            - Lock-free code needs a non-blocking queue.
+            - A message that keeps failing moves to the dead-letter queue.
+            """)
+        self.assertEqual(mentions, [
+            ("_Main Notes/Message queues.md", 'mentions "dead-letter queue" (line 9) but never links [[Dead-letter queue]]'),
+        ])
+
+    def test_linked_mentions_code_and_common_words_dont_warn(self):
+        mentions = self.mentions_vault("""\
+            - A message that keeps failing moves to the [[Dead-letter queue|DLQ]]; read the dead-letter queue daily.
+            - Message queues sit under the Azure MOC; `Queue` and [Peek-lock docs](https://x.y/Peek-lock) aren't mentions.
+            - Draw the flow as a graph, as https://x.y/Graph does. %% Graph %%
+            - ![[Lock]]
+            - A Lock blocks; Home lists every topic.
+            ```
+            Sessions and AMQP
+            ```
+
+            ## Sources
+            - The Peek-lock page
+            """)
+        self.assertEqual(mentions, [])
+
 
 class MoveTests(VaultTest):
     def test_rename_rewrites_every_link_form(self):
