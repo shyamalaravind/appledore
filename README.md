@@ -44,7 +44,8 @@ Start it with `/appledore:study <topic>`, then talk to it:
 |---|---|
 | *(a new topic)* | **plan:** it looks through your vault for what you already know, asks for 2–5 sources, your goal and where the topic belongs, and proposes a learning graph for you to edit. Then it writes the topic note and one stub per planned subtopic. |
 | `next` | **learn:** it writes the next subtopic whose prerequisites are done and gives you an `obsidian://` link to read it. |
-| any question | **file:** it answers from the agreed sources, then proposes where the answer belongs: inside one or more existing notes, or a new subtopic. |
+| a question about the subject | **file:** it answers from the agreed sources, then offers in one line to file the answer: inside one or more existing notes, or as a new subtopic. When the vault already answers it, you get that note's link instead. `just answer` turns the offer off. |
+| a question about the session, the plan or the vault | It answers directly, and files nothing. |
 | `deep dive <node>` | **deep-dive:** that node, or a topic a note left out, grows its own subtopics in the graph. |
 | `cold read it` | A fresh helper with no context reads the note as a newcomer would and reports every undefined term and missing "because". |
 | `wrap up` | **wrap-up:** it reviews the MOC chains the session touched (too big, too small, duplicates, orphans), proposes each change for your yes, then commits and pushes the vault. |
