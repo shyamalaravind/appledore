@@ -55,5 +55,4 @@ Then `palace check` must show no errors. If nothing needs changing, say so in on
 
 End with one line: what the session added (notes written, answers filed, stubs added) and what's
 ready next. For a finished topic, follow it with the topic's stubs to explore, as
-`palace next "<topic>" --left-out` prints them (each linked, with its summary, under the note that
-left it out), and end with how to pick one: "deep dive <stub>".
+`palace next "<topic>" --left-out` prints them, and how to pick one: "deep dive <stub>".

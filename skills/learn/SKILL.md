@@ -109,10 +109,9 @@ Open it with `palace open "<title>"` (its main note, if it spans notes), then in
 
 - the note's `obsidian://` link (several, if it spans notes);
 - the new concepts it teaches, in one line;
-- the stubs it left out, as links. If `palace next "<topic>"` now shows nothing planned, this was
-  the last planned node: give the topic's whole list instead, as
-  `palace next "<topic>" --left-out` prints it (each stub linked, with its summary, under the
-  note that left it out), and end with how to pick one: "deep dive <stub>";
+- the stubs it left out, as links. If `palace next "<topic>"` now shows nothing planned, give the
+  topic's whole list instead, as `palace next "<topic>" --left-out` prints it, and how to pick
+  one: "deep dive <stub>";
 - the new-concept question (the `study` skill's rule 3), if any concepts are waiting.
 
 Then wait. The user reads, and comes back with "next", a question, a deep dive, or a request for
