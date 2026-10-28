@@ -30,6 +30,7 @@ For a learning graph's notes (topic notes, subtopics and passages filed into the
    - A new concept is a term the reader doesn't know and the note keeps using. Bold it once, as the label of the bullet that defines it (`- **Proxy:** a server that …`). Bold nothing else except the labels in rule 8.
    - When the sources show a new concept in a tool or a language, the bullet that defines it, or one under it, says where it lives there: each class, method, built-in or setting (in Java, a condition variable is `wait` and `notify` on any object, or a `Condition` from `lock.newCondition()`).
    - Cut what the note's question doesn't need, such as name lengths, quotas and account limits: leave them out, or make them a Left out item.
+   - Still past 450 words: move a part into a new subtopic, as rule 14 says, never into a child note, whose words still count here. Under 150: merge the node into a neighbour, or make it a `type: note`.
 
    Because: working memory holds only three or four new things at once, and an interesting detail the question doesn't need hurts learning. A concept the reader can't find in their tool is one they can't use.
 
@@ -56,11 +57,17 @@ For a learning graph's notes (topic notes, subtopics and passages filed into the
 
 12. **Frame the topic in at most 100 words:** one line on the problem it solves, in the reader's terms, then 2–4 bullets on the one model the subtopics build on, linked. Don't list the subtopics or restate the `summary`. Because: the reader comes back to the Overview for the frame, and the Learning graph already holds the list.
 
-## A filed passage
+## Where new text goes
 
 13. **Repair before you add.** If the question shows that the note failed to define a term or give a reason, fix that bullet where it stands. Because: the next reader would trip at the same place.
 
-14. **Put a new passage where it will be found, written as part of the note.** A passage that extends a section becomes a bullet in it, after the bullet it extends: the answer, with its reason and one example as sub-bullets. Keep it to about 60 words and at most one new concept. A new aspect gets its own `##` section, before In an interview. Add its pages to Sources, and never write "you asked", "Q:" or a date. Because: the note must still read as one explanation, and an answer that needs more is a new subtopic.
+14. **Put new text where it will be found, written as part of the note.** Take the first place that fits, keeping a passage to about 60 words with at most one new concept, and the subtopic within rule 7's 450 words:
+   - **It extends a bullet:** a bullet after it, with its reason and one example as sub-bullets.
+   - **It is a new aspect of the note's concept:** its own `##` section, before In an interview.
+   - **It is a concept other notes will use on their own,** because they will link to it or it will gather questions of its own: a child note, with the connecting explanation kept in the main note. A concept that already has a note gets a link, never a copy.
+   - **Anything else:** a new subtopic in the learning graph, planned as a stub that builds on the note it grows from.
+
+   Add its pages to Sources, and never write "you asked", "Q:" or a date. Because: the note must still read as one explanation, and text that needs more needs a sitting of its own.
 
 ## An ordinary note (`type: note`)
 

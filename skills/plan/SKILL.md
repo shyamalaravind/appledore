@@ -46,8 +46,8 @@ is built. Then propose:
   sources cover. Mark a node the sources don't cover "not in the sources", so you and the user
   can agree a source for it or cut it. Each line gives the title
   (a canonical name, as the README says), a one-line summary, and what it builds on. A subtopic is
-  one sitting, a 2–3 minute read: 150–450 words with at most 3 new concepts. A node that needs
-  more becomes two nodes, and one too thin for a sitting merges into a neighbour.
+  one sitting, a 2–3 minute read, within `writing-rules.md` rule 7. A node that needs more
+  becomes two nodes, and one too thin for a sitting merges into a neighbour.
 - **Known nodes:** notes already in the vault that a subtopic builds on. They go into `builds_on`
   as they are.
 - **Take-overs:** a note whose concept *is* a planned subtopic. It becomes that subtopic instead of
