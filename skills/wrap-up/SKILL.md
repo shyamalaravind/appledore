@@ -28,8 +28,8 @@ navigate, which a big clean-up months later can't.
 
 - **`palace check`:** every warning on a touched note or chain: a MOC with two children or fewer
   (dissolve it), a note with more than 30 children (split it, or group some under a MOC), a
-  subtopic outside 150–450 words (over: split it; under: merge it, never pad), a learning graph
-  out of date.
+  subtopic outside 150–450 words (over: move a part into a new planned subtopic, never a child
+  note, whose words would still count; under: merge it, never pad), a learning graph out of date.
 - **New children:** a note that now has children gets `![[Children.base]]` at the end of its body,
   before Sources, so they're listed. One with five or more might be better as a MOC.
 - **Duplicates:** `palace find` on each new note's title, aliases and key words. Two notes on one
