@@ -151,16 +151,6 @@ class QueryTests(VaultTest):
                    + "Call `wait()` here.\n```java\nclass TaskQueue {\n    void take() {}\n}\n```\n")
         self.assertEqual(self.vault().get("C").words(), 2)
 
-    def test_a_child_notes_words_count_in_its_parents_group(self):
-        self.small_vault()
-        self.write("_Main Notes/Session state.md", note("State.", ["Sessions"], type="subtopic", builds_on=[]) + "words " * 100)
-        self.run_cli("graph", "Service Bus", "--write")
-        _, warnings = palace.check(self.vault())
-        self.assertTrue(any("500 words across 2 note(s)" in m for _, m in warnings))
-        self.write("_Main Notes/Session state.md", note("State.", ["Service Bus"], type="subtopic", builds_on=["[[Sessions]]"]) + "words " * 200)
-        self.run_cli("graph", "Service Bus", "--write")
-        self.assertEqual(palace.check(self.vault()), ([], []))
-
     def test_graph_draws_builds_on_and_stubs(self):
         self.small_vault()
         v = self.vault()
@@ -224,6 +214,16 @@ class CheckTests(VaultTest):
         self.assertTrue(any("no mocs" in m for m in errors))
         self.assertTrue(any("builds_on cycle" in m for m in errors))
         self.assertTrue(any("alias 'Queue' is the title" in m for m in errors))
+
+    def test_a_split_frees_words_only_as_a_new_subtopic(self):
+        self.small_vault()
+        self.write("_Main Notes/Session state.md", note("State.", ["Sessions"], type="subtopic", builds_on=[]) + "words " * 100)
+        self.run_cli("graph", "Service Bus", "--write")
+        _, warnings = self.messages()
+        self.assertTrue(any("500 words across 2 note(s)" in m for m in warnings))
+        self.write("_Main Notes/Session state.md", note("State.", ["Service Bus"], type="subtopic", builds_on=["[[Sessions]]"]) + "words " * 200)
+        self.run_cli("graph", "Service Bus", "--write")
+        self.assertEqual(self.messages(), ([], []))
 
     def test_style_warnings(self):
         self.small_vault()
