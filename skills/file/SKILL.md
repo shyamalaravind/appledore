@@ -58,4 +58,5 @@ rest of the session, until they ask for it back. A "file this" still files that 
    `palace graph "<topic>" --write`, and use `learn` to write it, around the question.
 4. `palace check`.
 
-Then give the links of the notes that changed, and wait for the user's next message.
+Then open the note to read first with `palace open`, unless `learn` already opened one in step 4,
+give the links of the notes that changed, and wait for the user's next message.

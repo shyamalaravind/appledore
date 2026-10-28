@@ -25,8 +25,8 @@ Run `palace next "<topic>"`.
   - One subtopic is ready: write it, and say so in one line ("Writing [[X]], which builds on
     [[Y]].").
   - Several are ready: list them, at most 5, with the one you recommend first, and ask.
-  - None is planned: say the graph is written, and offer a deep dive on one of the stubs left out,
-    or `wrap-up`.
+  - None is planned: say the graph is written, give the topic's stubs to explore as
+    `palace next "<topic>" --left-out` prints them, and offer a deep dive on one, or `wrap-up`.
 - **The user named a node:**
   - A ready one: write it.
   - A waiting one: name the prerequisites it waits for, and ask whether to write those first.
@@ -100,11 +100,13 @@ plugin's `cold-reader` agent.
 
 Do this straight after step 4. Step 5 runs only later, on request.
 
-In a few lines:
+Open it with `palace open "<title>"` (its main note, if it spans notes), then in a few lines:
 
 - the note's `obsidian://` link (several, if it spans notes);
 - the new concepts it teaches, in one line;
-- the stubs it left out, as links;
+- the stubs it left out, as links. If `palace next "<topic>"` now shows nothing planned, give the
+  topic's whole list instead, as `palace next "<topic>" --left-out` prints it, and how to pick
+  one: "deep dive <stub>";
 - the new-concept question (the `study` skill's rule 3), if any concepts are waiting.
 
 Then wait. The user reads, and comes back with "next", a question, a deep dive, or a request for

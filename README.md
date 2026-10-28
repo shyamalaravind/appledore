@@ -45,7 +45,7 @@ Start it with `/appledore:study <topic>`, then talk to it:
 | You say | What happens |
 |---|---|
 | *(a new topic)* | **plan:** it looks through your vault for what you already know, asks for 2–5 sources, your goal and where the topic belongs, and proposes a learning graph for you to edit. Then it writes the topic note and one stub per planned subtopic. |
-| `next` | **learn:** it writes the next subtopic whose prerequisites are done and gives you an `obsidian://` link to read it. |
+| `next` | **learn:** it writes the next subtopic whose prerequisites are done, opens it in Obsidian and gives you its `obsidian://` link. After the last one, it lists every stub the topic left out, for your next deep dive. |
 | a question about the subject | **file:** it answers from the agreed sources, then offers in one line to file the answer: inside one or more existing notes, or as a new subtopic. When the vault already answers it, you get that note's link instead. `just answer` turns the offer off. |
 | a question about the session, the plan, the vault or appledore | It answers directly, and files nothing. |
 | `deep dive <node>` | **deep-dive:** that node, or a topic a note left out, grows its own subtopics in the graph. |
@@ -167,7 +167,8 @@ There is no index file to fall out of date. Every command reads the notes themse
 | `related <note>` | a note's chain, children, prerequisites and links |
 | `backlinks <note>` | every note that links to it |
 | `graph <topic> [--write]` | the topic's learning graph, drawn from `builds_on` |
-| `next <topic>` | the planned subtopics that are ready, the ones waiting, and the stubs left out |
+| `next <topic> [--left-out]` | the planned subtopics that are ready, the ones waiting, and the stubs left out; `--left-out` lists only those, grouped by the note that left each out |
+| `open <note>` | open a note in Obsidian, through its command line interface when that's turned on and the `obsidian://` link otherwise, and print the link; `PALACE_OPEN=0` only prints it |
 | `check` | the vault's invariants, run after every write |
 | `mv <note> <new>` | rename or move a note, rewriting every link to it |
 | `convert` | legacy inline fields to YAML frontmatter |
@@ -188,7 +189,7 @@ There is no index file to fall out of date. Every command reads the notes themse
 **v0.1.0, in daily use.**
 
 **Next:**
-1. **Planning fixes:** weigh each node against your goal, read the sources' outlines before whole pages, and open notes in Obsidian for you.
+1. **Planning fixes:** weigh each node against your goal, and read the sources' outlines before whole pages.
 2. **Any vault:** a setup command, with the folder names and the vault path made configurable.
 3. **More agents:** native packages for Codex, Cursor and Gemini CLI.
 

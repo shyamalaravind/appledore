@@ -8,13 +8,16 @@ Usage: palace.py [--vault PATH] COMMAND ...
   related NOTE                        a note's chain, children, prerequisites and links
   backlinks NOTE                      every note that links to NOTE, and where
   graph TOPIC [--write]               a topic's learning graph, derived from builds_on
-  next TOPIC                          its planned subtopics: ready, waiting, and the stubs left out
+  next TOPIC [--left-out]             its planned subtopics: ready, waiting, and the stubs left out
   check                               the vault's invariants; exits 1 on any error
   convert [NOTE ...] [--write]        legacy inline **MOCs**: fields to YAML frontmatter
   mv NOTE NEW [--alias] [--dry-run]   rename or move a note and rewrite every link to it
+  open NOTE                           open a note in Obsidian, and print its obsidian:// link
 
 NOTE is a title, an alias or a path inside the vault. The vault defaults to
 ~/work-space/Solenya/Mind palace; set PALACE_VAULT or pass --vault to use another.
+open uses the Obsidian command line interface when it is turned on, and the
+system's opener with the obsidian:// link otherwise; PALACE_OPEN=0 only prints the link.
 There is no stored index: each call parses the vault's Markdown. Python 3.8+,
 standard library only.
 """
@@ -25,8 +28,12 @@ import argparse
 import difflib
 import os
 import re
+import shutil
+import subprocess
 import sys
+import unicodedata
 from pathlib import Path, PurePosixPath
+from urllib.parse import quote
 
 DEFAULT_VAULT = Path.home() / "work-space" / "Solenya" / "Mind palace"
 
@@ -583,6 +590,13 @@ def label(note, with_summary=True, width=110) -> str:
     return text
 
 
+def obsidian_uri(vault: Vault, note: Note) -> str:
+    """The link that opens a note in Obsidian: the vault's folder name and the note's path
+    without .md, both URL-encoded."""
+    return (f"obsidian://open?vault={quote(vault.root.name, safe='')}"
+            f"&file={quote(str(note.rel.with_suffix('')), safe='')}")
+
+
 def section(title, items):
     if items:
         print(f"{title}:")
@@ -749,11 +763,35 @@ def cmd_graph(vault: Vault, args):
         print(f"the learning graph in {topic.rel} is already current")
 
 
+def print_left_out(vault: Vault, topic: Note, rows):
+    """The stubs the topic's notes left out, as Markdown links grouped by the note that left
+    each out, in the learning graph's order."""
+    groups = {}
+    for _, n, left in rows:
+        if left:
+            parent = vault._first_parent(n)
+            groups.setdefault(id(parent), (parent, []))[1].append(n)
+    groups = [groups[id(n)] for _, n, left in rows if not left and id(n) in groups]
+    count = sum(len(stubs) for _, stubs in groups)
+    if not count:
+        print(f"{topic.title}: no stubs left out")
+        return
+    print(f"{topic.title}: {count} stub{'' if count == 1 else 's'} left out "
+          f"by {len(groups)} note{'' if len(groups) == 1 else 's'}")
+    for parent, stubs in groups:
+        print(f"- Left out by [{parent.title}]({obsidian_uri(vault, parent)}):")
+        for s in stubs:
+            print(f"  - [{s.title}]({obsidian_uri(vault, s)})" + (f": {s.summary}" if s.summary else ""))
+
+
 def cmd_next(vault: Vault, args):
     topic = vault.get(args.topic)
     if topic.kind != "topic":
         die(f"{topic.title!r} is a {topic.kind}, not a topic (type: topic)")
     rows, _ = vault.graph_rows(topic)
+    if args.left_out:
+        print_left_out(vault, topic, rows)
+        return
     written = [n for _, n, _ in rows if n.kind == "subtopic"]
     planned = [n for _, n, left in rows if n.kind == "stub" and not left]
     left_out = [n for _, n, left in rows if left]
@@ -1071,6 +1109,63 @@ def cmd_mv(vault: Vault, args):
     os.rename(note.path, target)  # a case-only rename works on case-insensitive disks too
 
 
+def try_run(command, timeout=15):
+    """A command's output, or None when it can't start, fails or hangs."""
+    try:
+        done = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", timeout=timeout)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return done.stdout.strip() if done.returncode == 0 else None
+
+
+def start_opener(command, wait=5) -> bool:
+    """Hand a link to the system's opener, detached from this process and its output, because an
+    app the opener starts would hold captured output open. True when the opener exits 0, or is
+    still running after `wait` seconds, as xdg-open is while an app it started runs."""
+    try:
+        process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL, start_new_session=True)
+    except OSError:
+        return False
+    try:
+        return process.wait(timeout=wait) == 0
+    except subprocess.TimeoutExpired:
+        return True
+
+
+def open_in_obsidian(vault: Vault, note: Note) -> str:
+    """Open a note in the running Obsidian app, and say how, or why it didn't."""
+    if os.environ.get("PALACE_OPEN") == "0":
+        return "not opened: PALACE_OPEN=0"
+    # The CLI answers even when it is turned off (Settings → General → Advanced), so a
+    # version number is what says it's on, and "Opened: <path>" that the open worked.
+    if shutil.which("obsidian") and re.match(r"\d", try_run(["obsidian", "version"]) or ""):
+        path = unicodedata.normalize("NFC", str(note.rel))  # Obsidian keys its files by NFC paths
+        out = try_run(["obsidian", f"vault={vault.root.name}", "open", f"path={path}"])
+        if out and out.startswith("Opened"):
+            return "opened through the Obsidian command line interface"
+    uri = obsidian_uri(vault, note)
+    if sys.platform.startswith("win"):
+        try:
+            os.startfile(uri)  # what start does, without cmd's quoting of & and %
+            return "opened through the obsidian:// link"
+        except OSError:
+            pass
+    else:
+        opener = "open" if sys.platform == "darwin" else "xdg-open"
+        if opener == "xdg-open" and not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+            return "not opened: no desktop (DISPLAY and WAYLAND_DISPLAY are unset)"  # xdg-open would try a text browser
+        if shutil.which(opener) and start_opener([opener, uri]):
+            return "opened through the obsidian:// link"
+    return "not opened: neither the Obsidian command line interface nor the system's opener worked"
+
+
+def cmd_open(vault: Vault, args):
+    n = vault.get(args.note)
+    print(obsidian_uri(vault, n))
+    print(open_in_obsidian(vault, n))
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="palace.py", description=__doc__.split("\n")[0],
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -1104,6 +1199,8 @@ def main(argv=None):
 
     p = sub.add_parser("next", help="a topic's planned subtopics: ready, waiting, and the stubs left out")
     p.add_argument("topic")
+    p.add_argument("--left-out", action="store_true",
+                   help="only the stubs left out, as links grouped by the note that left each out")
     p.set_defaults(run=cmd_next)
 
     p = sub.add_parser("check", help="the vault's invariants")
@@ -1120,6 +1217,10 @@ def main(argv=None):
     p.add_argument("--alias", action="store_true", help="keep the old title as an alias")
     p.add_argument("--dry-run", action="store_true")
     p.set_defaults(run=cmd_mv)
+
+    p = sub.add_parser("open", help="open a note in Obsidian, and print its obsidian:// link")
+    p.add_argument("note")
+    p.set_defaults(run=cmd_open)
 
     args = parser.parse_args(argv)
     args.run(Vault(args.vault), args)
