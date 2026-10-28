@@ -44,9 +44,11 @@ Give a numbered list the user can answer per item:
 
 1. Write each passage to `writing-rules.md`'s rules for a filed passage, and add its pages to that
    note's Sources.
-2. **Check the size.** If a subtopic goes past 450 words, propose a split: a part that becomes a
-   child note (`type: subtopic`, `mocs` this subtopic), or a new subtopic of its own. Write it on
-   the user's yes.
+2. **Check the size.** If a subtopic goes past 450 words, propose moving a part out into a new
+   subtopic in the learning graph: a planned stub with `mocs` the topic and `builds_on` this
+   subtopic, which `learn` then writes. Never move it into a child note, because `palace check`
+   counts a child note's words in its parent's group, so the group would stay over 450. Write it
+   on the user's yes.
 3. For a new subtopic, create its stub in `Stubs/` as `plan` does, run
    `palace graph "<topic>" --write`, and use `learn` to write it.
 4. `palace check`.
