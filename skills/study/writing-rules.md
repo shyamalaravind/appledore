@@ -10,7 +10,7 @@ For a learning graph's notes (topic notes, subtopics and passages filed into the
 
 3. **Define every term where it first appears, or replace it with plain words.** Define it in words the reader already has. Keep one word for each thing, and one meaning for each word. Where the topic gives a familiar word a new meaning, say so in a few words ("not a Docker container"). Leave no jargon the note doesn't define: vendor phrases such as "unstructured data" or "scenarios" become plain words. Because: an unknown word costs the reader the rest of the line, and a word with two meanings makes them stop to work out which.
 
-4. **Link a note at its first mention.** For a term an earlier note taught, add a reminder of a few words instead of a definition: "a [[Blob Storage resource model|container]] (a named group of blobs)". Because: a few words bring back what the reader learned days ago, without teaching it twice.
+4. **Link a note at its first mention in every note, even when another note already links it.** For a term an earlier note taught, add a reminder of a few words instead of a definition: "a [[Blob Storage resource model|container]] (a named group of blobs)". Because: the reader may read this note and not the other, and a few words bring back what they learned days ago, without teaching it twice.
 
 5. **Keep the "because" inside the bullet.** Give every rule, limit and default its scope ("blob names", not "names") and its reason, in the same bullet or a sub-bullet under it. Use the sources' reason. When they give none, say what follows from the rule ("so `Cat.jpg` is a second blob"), and never invent a reason. Because: a rule without its reason can't be applied to a new case, and an invented reason teaches something false.
 
