@@ -93,8 +93,9 @@ plugin's `cold-reader` agent.
 2. **Start a fresh helper** with the brief as its prompt. It sees nothing else, which is what
    makes the read cold.
 3. **Fix** what it reports where the text is at fault: a term used before it's defined, a concept
-   it couldn't say why exists, a rule without its reason, a bare fact, too much new at once, a part
-   it couldn't paraphrase, a place it read twice. Find the writing rule each finding breaks, and fix the line where the reader met
+   whose reason to exist it couldn't find, a rule without its reason, a bare fact, too much new at
+   once, a part it couldn't paraphrase, a place it read twice. Find the writing rule each finding
+   breaks, and fix the line where the reader met
    it. Ignore a finding the cited lines already answer, and a question only someone putting the
    note to use would ask, because those are what the user's own questions are for. Keep the size
    limits.
