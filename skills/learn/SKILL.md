@@ -72,8 +72,8 @@ Write to `writing-rules.md`:
    now says.
 3. `palace graph "<topic>" --write`, then `palace check`. Don't leave a size warning:
    - **Over 450 words:** cut what the note's question doesn't need, or split the node: move a part
-     into a new planned subtopic that builds on this one, never into a child note, because
-     `palace check` counts a child note's words toward this one's 450.
+     into a new planned subtopic that builds on this one, never into a child note, whose words
+     still count toward this one's 450.
    - **Under 150 words:** the node is too thin for a sitting. Never pad it: ask the user whether to
      merge it into a neighbouring node or make it a `type: note`.
 

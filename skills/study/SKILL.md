@@ -3,7 +3,7 @@ name: study
 description: >-
   Run an appledore study session that builds the user's Obsidian vault, the Mind Palace, while they
   learn a topic: plan the topic together as a learning graph of subtopics, teach it one bite-sized
-  subtopic at a time, file answers to their questions on the subject into the vault, expand any node on
+  subtopic at a time, file answers to their questions about it into the vault, expand any node on
   request, and wrap up by reviewing the MOC chains and committing the vault. Use when the user says
   "let's study X", "study X", "continue studying X", "resume X", or runs /appledore:study, and for
   the rest of that session whenever they say "next", ask about what they're reading, say "deep dive
