@@ -31,8 +31,10 @@ flowchart LR
     P["plan<br/>sources, goal, placement,<br/>learning graph"] --> L["learn<br/>the next subtopic"]
     L --> U(("you read"))
     U -- "next" --> L
-    U -- "a question" --> F["file<br/>answer, then fold it<br/>into the right notes"]
+    U -- "a question about the subject" --> F["file<br/>answer, then fold it<br/>into the right notes"]
     F --> U
+    U -- "any other question" --> A["answered directly,<br/>nothing filed"]
+    A --> U
     U -- "deep dive X" --> D["deep-dive<br/>X grows subtopics"]
     D --> L
     U -- "wrap up" --> W["wrap-up<br/>review the MOCs,<br/>commit the vault"]
