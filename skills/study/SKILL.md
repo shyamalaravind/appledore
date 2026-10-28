@@ -70,11 +70,11 @@ loop.
    synonyms and its key words. If a note already covers the concept, link to it instead, because
    two notes on one idea split everything written about it.
 3. **New concepts.** Link a concept that has a note at its first mention in each note you write,
-   even when another note already links it. `palace check` warns when a note names another note
-   by its title or an alias but never links it: link each mention it reports in a note you wrote,
-   unless the words mean something else there. When a concept has no note and no place in the
-   learning graph, collect it, and at the end of the step ask the user once about all of them: add
-   it to the graph as a stub, write it now, or leave it as plain text.
+   even when another note already links it. When `palace check` warns that a note you wrote
+   mentions another note but never links it, link that mention, unless the words mean something
+   else there. When a concept has no note and no place in the learning graph, collect it, and at
+   the end of the step ask the user once about all of them: add it to the graph as a stub, write
+   it now, or leave it as plain text.
 4. **Only the agreed sources.** Every claim in a note, and in an answer, comes from the topic's
    agreed sources (the topic note's Sources). Read them where they cover what you're writing, and
    state only what they say. Never fill a gap from memory, because a claim from memory can be out
