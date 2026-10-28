@@ -186,7 +186,7 @@ There is no index file to fall out of date. Every command reads the notes themse
 **v0.1.0, in daily use.**
 
 **Next:**
-1. **Planning fixes:** weigh each node against your goal, read the sources' outlines before whole pages, and open notes in Obsidian for you.
+1. **Planning fixes:** weigh each node against your goal, and read the sources' outlines before whole pages.
 2. **Any vault:** a setup command, with the folder names and the vault path made configurable.
 3. **More agents:** native packages for Codex, Cursor and Gemini CLI.
 

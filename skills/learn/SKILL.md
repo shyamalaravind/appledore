@@ -25,8 +25,8 @@ Run `palace next "<topic>"`.
   - One subtopic is ready: write it, and say so in one line ("Writing [[X]], which builds on
     [[Y]].").
   - Several are ready: list them, at most 5, with the one you recommend first, and ask.
-  - None is planned: say the graph is written, and offer a deep dive on one of the stubs left out,
-    or `wrap-up`.
+  - None is planned: say the graph is written, give the topic's stubs to explore as
+    `palace next "<topic>" --left-out` prints them, and offer a deep dive on one, or `wrap-up`.
 - **The user named a node:**
   - A ready one: write it.
   - A waiting one: name the prerequisites it waits for, and ask whether to write those first.
