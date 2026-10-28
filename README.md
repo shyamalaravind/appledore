@@ -1,6 +1,6 @@
 # appledore
 
-**Build your Obsidian vault while you learn.** Plan a topic with an AI agent as a learning graph, read it one bite-sized subtopic at a time, and every question you ask is answered from sources you agreed on and filed into your vault as linked notes. Your mind palace grows during the session, not in a note-taking chore afterwards.
+**Build your Obsidian vault while you learn.** Plan a topic with an AI agent as a learning graph, read it one bite-sized subtopic at a time, and every question you ask about it is answered from sources you agreed on and filed into your vault as linked notes. Your mind palace grows during the session, not in a note-taking chore afterwards.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-d97757.svg)](#install)
@@ -20,7 +20,7 @@ appledore makes the learning session itself the note-taking:
 
 - **Planned, not dumped.** Before anything is written, you and the agent agree on the sources, your goal (an exam, a project, an interview, not "everything about it"), where the topic sits in your vault, and a learning graph of subtopics, prerequisites first.
 - **Taught in bites.** Each subtopic teaches at most three new concepts in 150–450 words, uses only what its prerequisites taught, and ends with what it **left out on purpose**, as questions you can pick next.
-- **Every answer lands in the vault.** Ask anything while reading. The answer is folded into the notes it belongs in, or becomes a new subtopic, after your yes.
+- **Every answer lands in the vault.** Ask anything about the topic while reading. The answer is folded into the notes it belongs in, or becomes a new subtopic, after your yes.
 - **Grounded.** Every claim comes from the sources you agreed on. When they don't cover something, the agent says so and proposes a page, and it never fills a gap from memory.
 - **A vault that stays navigable.** Every note sits in a MOC chain. A script checks the vault's invariants after every write, and a wrap-up reviews the structure and commits.
 
@@ -31,8 +31,10 @@ flowchart LR
     P["plan<br/>sources, goal, placement,<br/>learning graph"] --> L["learn<br/>the next subtopic"]
     L --> U(("you read"))
     U -- "next" --> L
-    U -- "a question" --> F["file<br/>answer, then fold it<br/>into the right notes"]
+    U -- "a question about the subject" --> F["file<br/>answer, then offer to fold it<br/>into the right notes"]
     F --> U
+    U -- "any other question" --> A["answered directly,<br/>nothing filed"]
+    A --> U
     U -- "deep dive X" --> D["deep-dive<br/>X grows subtopics"]
     D --> L
     U -- "wrap up" --> W["wrap-up<br/>review the MOCs,<br/>commit the vault"]
@@ -44,7 +46,8 @@ Start it with `/appledore:study <topic>`, then talk to it:
 |---|---|
 | *(a new topic)* | **plan:** it looks through your vault for what you already know, asks for 2–5 sources, your goal and where the topic belongs, and proposes a learning graph for you to edit. Then it writes the topic note and one stub per planned subtopic. |
 | `next` | **learn:** it writes the next subtopic whose prerequisites are done and gives you an `obsidian://` link to read it. |
-| any question | **file:** it answers from the agreed sources, then proposes where the answer belongs: inside one or more existing notes, or a new subtopic. |
+| a question about the subject | **file:** it answers from the agreed sources, then offers in one line to file the answer: inside one or more existing notes, or as a new subtopic. When the vault already answers it, you get that note's link instead. `just answer` turns the offer off. |
+| a question about the session, the plan, the vault or appledore | It answers directly, and files nothing. |
 | `deep dive <node>` | **deep-dive:** that node, or a topic a note left out, grows its own subtopics in the graph. |
 | `cold read it` | A fresh helper with no context reads the note as a newcomer would and reports every undefined term and missing "because". |
 | `wrap up` | **wrap-up:** it reviews the MOC chains the session touched (too big, too small, duplicates, orphans), proposes each change for your yes, then commits and pushes the vault. |

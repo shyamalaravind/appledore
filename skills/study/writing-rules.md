@@ -19,12 +19,20 @@ For a learning graph's notes (topic notes, subtopics and passages filed into the
    - One fact per bullet, in about 20 words at most. A bullet may be a fragment when its subject is clear from the bullet above. Name who acts when it isn't obvious ("your server creates the SAS").
    - Keep the joining words that carry meaning: because, so, unless, instead of. Cut the rest: no line that announces the next one ("Hello Interview describes the steps."), no recap, no hedge that carries no real doubt, no idioms or emoji.
    - Put at most five bullets in a group.
+   - Keep the prose terse, never the code. Code is complete, with every import, field and method body, a line comment on each step, and no placeholder such as `...` or `/* swap */`. It counts toward no word limit, rule 7's 450 included, so never shorten it to fit one.
 
-   Because: the reader scans, the indent shows what belongs to what, and the reasons are what turn a list of facts into a model.
+   Because: the reader scans, the indent shows what belongs to what, and the reasons are what turn a list of facts into a model. A reader new to the topic can't fill a gap in code.
 
 ## A subtopic note
 
-7. **Teach at most three new concepts, in 150–450 words across the subtopic's notes.** A new subtopic usually needs 200–350. Use as few as the question needs, and never pad to reach the floor. A new concept is a term the reader doesn't know and the note keeps using. Bold it once, as the label of the bullet that defines it (`- **Proxy:** a server that …`). Bold nothing else except the labels in rule 8. Cut what the note's question doesn't need, such as name lengths, quotas and account limits: leave them out, or make them a Left out item. Because: working memory holds only three or four new things at once, and an interesting detail the question doesn't need hurts learning.
+7. **Teach at most three new concepts, in 150–450 words across the subtopic's notes.**
+   - A new subtopic usually needs 200–350 words. Use as few as the question needs, and never pad to reach the floor.
+   - A new concept is a term the reader doesn't know and the note keeps using. Bold it once, as the label of the bullet that defines it (`- **Proxy:** a server that …`). Bold nothing else except the labels in rule 8.
+   - When the sources show a new concept in a tool or a language, the bullet that defines it, or one under it, says where it lives there: each class, method, built-in or setting (in Java, a condition variable is `wait` and `notify` on any object, or a `Condition` from `lock.newCondition()`).
+   - Cut what the note's question doesn't need, such as name lengths, quotas and account limits: leave them out, or make them a Left out item.
+   - Still past 450 words: move a part into a new subtopic, as rule 14 says, never into a child note, whose words still count here. Under 150: merge the node into a neighbour, or make it a `type: note`.
+
+   Because: working memory holds only three or four new things at once, and an interesting detail the question doesn't need hurts learning. A concept the reader can't find in their tool is one they can't use.
 
 8. **Open with two labelled lines: the point, then the case.**
    - `**In short:**` One or two lines that give the note's point and name the problem it solves, so the line stands on its own. Never label it "Answer": the title is a concept, so there is no question on the page for it to answer. It may say what the `summary` says, in the problem's terms, but never copies it. A subtopic that changes an earlier flow says what the change fixes.
@@ -32,7 +40,14 @@ For a learning graph's notes (topic notes, subtopics and passages filed into the
 
    Because: the point first lets the reader see where the detail is going, and a labelled case grounds each later bullet before the reader can guess wrong.
 
-9. **Head each part, and keep other signals rare.** After the two lines, give each part a `##` heading naming what it explains, three at most. Use at most one callout: a `> [!warning]` titled with the correction, after its section's bullets, for a trap. A trap is a wrong belief the reader probably holds that would cause a real mistake. Draw a flow of three or more steps as a text arrow or Mermaid of at most six nodes, in the note's own words, nested under the bullet it shows. Because: headings help a reader new to a topic find and remember its parts. A callout or diagram works only while it is rare, and a cold reader sees only text.
+9. **Head each part, show why before how, and keep other signals rare.**
+   - After the two lines, give each part a `##` heading naming what it explains, three at most.
+   - When the subtopic's concept exists to get around a constraint, the first of the three parts is `## Why it exists`: the constraints in order, each with its because, ending with the concept as the way out.
+   - Trace a mechanism with two or more actors, such as threads or services, in numbered steps on the Example's case, nested under the bullet it shows: each step a text arrow of who holds or does what (`2. Worker: wait() lets go of the lock → sleeps`). The numbers are an exception to rule 6's bullets.
+   - Draw any other flow of three or more steps as a text arrow or Mermaid of at most six nodes, in the note's own words, nested under the bullet it shows.
+   - Use at most one callout: a `> [!warning]` titled with the correction, after its section's bullets, for a trap. A trap is a wrong belief the reader probably holds that would cause a real mistake.
+
+   Because: headings help a reader new to a topic find and remember its parts. A concept that gets around a constraint makes sense only once the reader has seen the simpler ways fail, and a mechanism with several actors only once each step says who holds what. A callout or diagram works only while it is rare, and a cold reader sees only text.
 
 10. **Close the body with `## In an interview`:** 1–3 bullets on what you'd say or decide, and the mistake it prevents. For a Scope whose goal isn't interviews, name the heading after that goal's use instead. Never recap. Because: this is the part the reader returns to before using the topic, and a heading makes it one click away in the outline.
 
@@ -42,11 +57,17 @@ For a learning graph's notes (topic notes, subtopics and passages filed into the
 
 12. **Frame the topic in at most 100 words:** one line on the problem it solves, in the reader's terms, then 2–4 bullets on the one model the subtopics build on, linked. Don't list the subtopics or restate the `summary`. Because: the reader comes back to the Overview for the frame, and the Learning graph already holds the list.
 
-## A filed passage
+## Where new text goes
 
 13. **Repair before you add.** If the question shows that the note failed to define a term or give a reason, fix that bullet where it stands. Because: the next reader would trip at the same place.
 
-14. **Put a new passage where it will be found, written as part of the note.** A passage that extends a section becomes a bullet in it, after the bullet it extends: the answer, with its reason and one example as sub-bullets. Keep it to about 60 words and at most one new concept. A new aspect gets its own `##` section, before In an interview. Add its pages to Sources, and never write "you asked", "Q:" or a date. Because: the note must still read as one explanation, and an answer that needs more is a new subtopic.
+14. **Put new text where it will be found, written as part of the note.** Take the first place that fits, keeping a passage to about 60 words with at most one new concept, and the subtopic within rule 7's 450 words:
+   - **It extends a bullet:** a bullet after it, with its reason and one example as sub-bullets.
+   - **It is a new aspect of the note's concept:** its own `##` section, before In an interview.
+   - **It is a concept other notes will use on their own,** because they will link to it or it will gather questions of its own: a child note, with the connecting explanation kept in the main note. A concept that already has a note gets a link, never a copy.
+   - **Anything else:** a new subtopic in the learning graph, planned as a stub that builds on the note it grows from.
+
+   Add its pages to Sources, and never write "you asked", "Q:" or a date. Because: the note must still read as one explanation, and text that needs more needs a sitting of its own.
 
 ## An ordinary note (`type: note`)
 

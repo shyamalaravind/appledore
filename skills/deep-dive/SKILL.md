@@ -29,8 +29,8 @@ Run `palace related "X"`. Its chain says where X sits:
 1. Read the topic note's Scope and Sources, and the agreed sources' pages on X. If they don't
    cover X, say so and agree a source with the user first (the `study` skill's rule 4).
 2. Propose 1–4 new nodes under X, as `plan` proposes a graph: each with a title, a one-line
-   summary and what it builds on (X, or another node). Each stays one sitting: 150–450 words
-   with at most 3 new concepts.
+   summary and what it builds on (X, or another node). Each stays one sitting, within
+   `writing-rules.md` rule 7.
 3. **If X is a stub a subtopic left out,** X itself joins the graph first: its `mocs` moves from
    that subtopic to the topic note, and that subtopic goes into its `builds_on`. Then X is the
    first node `learn` writes.

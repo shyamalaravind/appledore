@@ -48,17 +48,12 @@ Run `palace next "<topic>"`.
 
 ## 3. Write
 
-Write to `writing-rules.md`:
+Write to `writing-rules.md`. Its rule 7 sets the size, across every note the subtopic spans.
 
-- **Size:** 150–450 words in total, usually 200–350, however many notes it spans, with at most 3
-  new concepts. Use as few as the node needs, and never pad.
-- **One note or several, whichever fits the palace best.** The subtopic is a node of the graph,
-  not a file, so its words can sit in one note or in a note with child notes. Give a part a child
-  note of its own when it is a concept the palace will use on its own: other notes will link to
-  it, it will gather questions of its own, or it already exists as a note (then link it, never
-  copy it). The connecting explanation stays in the subtopic's main note. A child gets
-  `type: subtopic`, `mocs` the main note and an empty `builds_on`. Never make a subtopic a MOC: a
-  node that needs a map of its own is a topic.
+- **One note or several.** The subtopic is a node of the graph, not a file, so its words can sit
+  in one note or in a note with child notes, and rule 14 says when a part gets a child note. A
+  child gets `type: subtopic`, `mocs` the main note and an empty `builds_on`. Never make a
+  subtopic a MOC: a node that needs a map of its own is a topic.
 - **Left out on purpose:** 2–4 topics the sources raise here that this subtopic skips. Run
   `palace find` on each. One that has a note gets a link. One that doesn't becomes a stub in
   `Stubs/`, from `__templates/Stub.md`, with a one-sentence `summary`, `mocs` this subtopic, and a
@@ -70,10 +65,9 @@ Write to `writing-rules.md`:
 2. Rewrite the note in the shape of `__templates/Subtopic.md`. Keep its `mocs`, `builds_on`,
    `aliases` and `created`, add `type: subtopic`, and rewrite `summary` so it says what the note
    now says.
-3. `palace graph "<topic>" --write`, then `palace check`. Don't leave a size warning:
-   - **Over 450 words:** cut what the note's question doesn't need, or split the node.
-   - **Under 150 words:** the node is too thin for a sitting. Never pad it: ask the user whether to
-     merge it into a neighbouring node or make it a `type: note`.
+3. `palace graph "<topic>" --write`, then `palace check`. Don't leave a size warning: fix it as
+   `writing-rules.md` rule 7 says, and ask the user before you merge a node or make it a
+   `type: note`.
 
 ## 5. Cold read, only when the user asks
 
@@ -92,9 +86,10 @@ plugin's `cold-reader` agent.
    follows rules.
 2. **Start a fresh helper** with the brief as its prompt. It sees nothing else, which is what
    makes the read cold.
-3. **Fix** what it reports where the text is at fault: a term used before it's defined, a rule
-   without its reason, a bare fact, too much new at once, a part it couldn't paraphrase, a place it read
-   twice. Find the writing rule each finding breaks, and fix the line where the reader met
+3. **Fix** what it reports where the text is at fault: a term used before it's defined, a concept
+   whose reason to exist it couldn't find, a rule without its reason, a bare fact, too much new at
+   once, a part it couldn't paraphrase, a place it read twice. Find the writing rule each finding
+   breaks, and fix the line where the reader met
    it. Ignore a finding the cited lines already answer, and a question only someone putting the
    note to use would ask, because those are what the user's own questions are for. Keep the size
    limits.
