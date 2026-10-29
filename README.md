@@ -139,9 +139,7 @@ Each choice above is a bet on what helps a reader learn from text. A review of a
 
 The repo is its own marketplace. While it's private, your GitHub account needs access to it.
 
-Then either:
-- `/appledore:study <topic>` inside any session, or
-- `claude --agent appledore:study` to run a whole session as the study agent.
+Then start it with `/appledore:study <topic>` inside any session.
 
 To work on appledore itself, add your clone instead (`claude plugin marketplace add ~/path/to/appledore`). It loads in place, and `/reload-plugins` picks up your edits.
 
@@ -188,7 +186,7 @@ The write commands (`mv`, `new`, `promote`, `set` and `merge`) take `--dry-run`,
 |---|---|
 | [`skills/study/`](skills/study) | The one skill. `SKILL.md` is the loop and its rules, `steps/` holds its four steps (`plan`, which also runs deep dives, `learn`, `file` and `wrap-up`), `writing-rules.md` the 15 writing rules, and `cold-read.md` the cold reader's brief. |
 | [`skills/study/scripts/appledore.py`](skills/study/scripts/appledore.py) | The vault's index and checks. |
-| [`agents/`](agents) | Claude Code only: the `study` main agent and the tool-less `cold-reader`. |
+| [`agents/`](agents) | Claude Code only: the tool-less `cold-reader`. |
 | [`.claude-plugin/`](.claude-plugin) | The plugin manifest and its marketplace. |
 | [`tests/`](tests) | `python3 -m unittest discover -s tests` |
 | [`docs/`](docs) | [research.md](docs/research.md), the evidence behind the writing rules, and [vault-conventions.md](docs/vault-conventions.md), the layout the vault follows. |

@@ -113,12 +113,21 @@ Run `appledore related 'X'`. Its chain says where X sits:
    cover X, follow study rule 4 first.
 2. Propose 1–4 new nodes under X, as step 3 proposes a graph: each with a title, a one-line
    summary and what it builds on (X, or another node). Each stays one sitting, within
-   `writing-rules.md` rule 7.
-3. **If X is a stub a subtopic left out,** propose that X itself joins the graph, as the first
-   node `learn` writes.
-4. On the user's yes, put such an X in the graph with `appledore set 'X'`, `mocs` the topic and
-   `builds_on` the subtopic that left it out. Create the new stubs as step 4 does, run
-   `appledore check`, and offer to write the first ready one with `learn`.
+   `writing-rules.md` rule 7. Look for each one first, as study rule 2 says: one the vault
+   already has isn't proposed again. A written note or planned stub that a node needs goes into
+   its `builds_on`, as step 4 does, but a stub a subtopic left out is only linked, or proposed to
+   join the graph as X is (item 4), because `appledore next` never makes a node that builds on
+   it ready. Step 3's folding never takes every part into X here: at least one new node stays,
+   because the user asked to go past X.
+3. **If the agreed sources run out at X,** with too little beyond what X's own sitting teaches to
+   fill another, still propose the nodes: mark what the sources don't cover "not in the sources",
+   as step 3 does, and follow study rule 4 for it.
+4. **If X is a stub a subtopic left out,** propose that X itself joins the graph, as the first
+   node `learn` writes, even when the agreed sources run out at X.
+5. On the user's yes, move each left-out stub that joins (X, or one from item 2) into the graph
+   with `appledore set`: `mocs` the topic and `builds_on` the subtopic that left it out. Create
+   the new stubs as step 4 does, run `appledore check`, and offer to write the first ready one
+   with `learn`.
 
 ### Outside every graph
 
