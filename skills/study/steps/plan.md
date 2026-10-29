@@ -1,25 +1,19 @@
----
-name: plan
-description: >-
-  Step of the appledore study loop: plan a new topic with the user (its sources, its goal and
-  depth, where it sits in the vault, and its learning graph of subtopics), then write the topic
-  note and one stub per planned subtopic. Use only inside a study session that the appledore study
-  skill started, when the topic has no topic note yet.
----
-
 # Plan
-
-This runs inside an appledore study session. If the `study` skill isn't loaded, load it first: it
-sets up `palace` and holds the rules every step follows.
 
 The plan is made with the user, because only they know what the topic is for and how far to go.
 Nobody can learn all of a field, so the plan sets the edges before anything is written.
 
+Two requests land here. Both propose nodes, wait for the user's yes and write stubs, which `learn`
+then writes one sitting at a time:
+
+- **A new topic,** one with no topic note yet: steps 1–5.
+- **"Deep dive X":** X grows the subtopics that go under it (Deep dive, at the end).
+
 ## 1. Look in the vault
 
-- `palace find "<topic>"`, then its synonyms and key words, then the same with `--body`.
-- `palace tree --summary` for the MOC chains, and `palace related` on the two or three likeliest
-  parents.
+- `appledore find "<topic>"`, then its synonyms and key words, then the same with `--body`.
+- `appledore tree --summary` for the MOC chains, and `appledore related` on the two or three
+  likeliest parents.
 
 Note what the vault already has: notes on the topic or its parts, and where the topic could sit.
 
@@ -69,12 +63,54 @@ On the user's yes, writing every note from its template in `__templates/`:
    - **Sources:** the agreed sources, each a link with its title.
 3. **One stub per planned subtopic** in `Stubs/`, from `Stub.md`: a `summary` saying what the
    subtopic will teach, `mocs` the topic note, and `builds_on` its prerequisites (other planned
-   stubs or known notes). The `builds_on` is what lets `palace next` tell which subtopic is ready.
-4. **Each take-over** now, with the `learn` skill's steps 2–4, starting from the note's own content
-   and the sources. It gets `type: subtopic`, `mocs` the topic, and its planned `builds_on`.
-5. `palace graph "<topic>" --write`, then `palace check`.
+   stubs or known notes). The `builds_on` is what lets `appledore next` tell which subtopic is
+   ready.
+4. **Each take-over** now, with `learn`'s steps 2–4, starting from the note's own content and the
+   sources. It gets `type: subtopic`, `mocs` the topic, and its planned `builds_on`.
+5. `appledore graph "<topic>" --write`, then `appledore check`.
 
 ## 5. Hand back
 
-Give the user the topic note's link and the graph as `palace graph "<topic>"` prints it, then use
-`learn` for the first ready subtopic.
+Give the user the topic note's link and the graph as `appledore graph "<topic>"` prints it, then
+use `learn` for the first ready subtopic.
+
+## Deep dive
+
+The user decides what gets a deep dive, because only they know which gaps matter for their goal. A
+deep dive plans and `learn` writes, so every subtopic is still written one sitting at a time, from
+what its prerequisites taught.
+
+Run `appledore related "X"`. Its chain says where X sits:
+
+- **In a topic's learning graph:** X is a subtopic, or a stub whose `mocs` is a subtopic (one it
+  left out). Expand it in the graph, below.
+- **Outside every graph:** X is an ordinary note, or a stub under one. Go to Outside every graph,
+  below.
+
+### In a graph
+
+1. Read the topic note's Scope and Sources, and the agreed sources' pages on X. If they don't
+   cover X, follow study rule 4 first.
+2. Propose 1–4 new nodes under X, as step 3 proposes a graph: each with a title, a one-line
+   summary and what it builds on (X, or another node). Each stays one sitting, within
+   `writing-rules.md` rule 7.
+3. **If X is a stub a subtopic left out,** X itself joins the graph first: its `mocs` moves from
+   that subtopic to the topic note, and that subtopic goes into its `builds_on`. Then X is the
+   first node `learn` writes.
+4. On the user's yes, write the new stubs as step 4 does (`mocs` the topic note, `builds_on` set),
+   run `appledore graph "<topic>" --write` and `appledore check`, and offer to write the first
+   ready one with `learn`.
+
+### Outside every graph
+
+Ask the user which they want:
+
+- **Write X now** as an ordinary note: `type: note`, in their bullet style (a `summary`, then
+  bullets, then Sources), written to `writing-rules.md`'s rules for ordinary notes. A stub moves to
+  `_Main Notes/` first, with `appledore mv "X" "_Main Notes/"`. Once it's written, open it with
+  `appledore open "X"`, and give its link.
+- **Make X a topic** of its own, in place: X keeps its name and links. Plan it with steps 1–5, X
+  being the topic. The topic note is X itself: a stub moves to `_Main Notes/` first, and an
+  ordinary note's content is cut down to the Overview, with the rest becoming planned subtopics.
+
+Then wait for the user's next message.
