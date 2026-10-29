@@ -28,7 +28,7 @@ Results land in `evals/results/`, which git ignores.
 | `03-appledore-question-no-offer` | a question about appledore gets a direct answer and no offer, and the answer says filing waits for the user's yes |
 | `04-just-answer-turns-offer-off` | after "just answer", an answer comes with no offer, but still drawn from the agreed sources and naming them, because "just answer" turns off only the offer |
 | `05-oversized-subtopic-splits` | a subtopic pushed past 450 words gets a new planned subtopic proposed, never a child note |
-| `06-deep-dive-proposes-and-waits` | a deep dive proposes 1–4 nodes and writes nothing before a yes |
+| `06-deep-dive-proposes-and-waits` | a deep dive proposes 1–4 nodes, none repeating a stub the graph already plans, and writes nothing before a yes |
 | `07-sources-dont-cover` | a question the sources don't cover gets "the agreed sources don't cover it", never an answer from memory |
 | `08-plan-asks-in-one-message` | a new topic's plan asks for sources, goal and placement in one message |
 | `09-next-writes-recommended-node` | "next" with two ready nodes writes the one `appledore next` recommends, without asking which |
