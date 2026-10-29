@@ -50,9 +50,11 @@ Write to `writing-rules.md`. Its rule 7 sets the size, across every note the sub
 2. Rewrite the note in the shape of `__templates/Subtopic.md`. Keep its `mocs`, `builds_on`,
    `aliases` and `created`, add `type: subtopic`, and rewrite `summary` so it says what the note
    now says.
-3. `appledore graph "<topic>" --write`, then `appledore check`. Don't leave a size warning: fix it
-   as `writing-rules.md` rule 7 says, and ask the user before you merge a node or make it a
-   `type: note`.
+3. `appledore graph "<topic>" --write`, then `appledore check`. Don't leave a size or shape
+   warning. Fix a size warning as `writing-rules.md` rule 7 says, and ask the user before you
+   merge a node or make it a `type: note`. Fix a shape warning (a missing part, a Left out list
+   outside 2–4, more than three bold terms, a summary over 25 words) in the note, because the
+   reader looks for each part where every other subtopic has it.
 
 ## 5. Cold read, only when the user asks
 

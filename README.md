@@ -56,13 +56,13 @@ Start it with `/appledore:study <topic>`, then talk to it:
 
 ### A learning graph
 
-Each topic gets a topic note that draws its learning graph from the notes' own `builds_on` links, so it can never drift from the vault. Indentation means "builds on", and `· stub` means planned or left out, not written yet:
+Each topic gets a topic note that draws its learning graph from the notes' own `builds_on` links, so it can never drift from the vault. Indentation means "builds on", `· stub` means planned but not written yet, and `· left out` means a note left it out on purpose, for a deep dive later:
 
 ```
 <topic>
 - [[Core model]]
   - [[First mechanism]]
-    - [[A detail it left out]] · stub
+    - [[A detail it left out]] · left out
   - [[Second mechanism]]
     - [[A deeper case]]
 - [[Planned next]] · stub
@@ -163,13 +163,13 @@ There is no index file to fall out of date. Every command reads the notes themse
 | Command | What it does |
 |---|---|
 | `find <words>` | notes whose title, aliases or summary match, the duplicate check before anything is created |
-| `tree` | the MOC chains, from the root MOCs down |
+| `tree [--mocs]` | the MOC chains, from the root MOCs down; `--mocs` keeps only the MOCs and topics, with their summaries, and the notes directly under a MOC |
 | `related <note>` | a note's chain, children, prerequisites and links |
 | `backlinks <note>` | every note that links to it |
 | `graph <topic> [--write]` | the topic's learning graph, drawn from `builds_on` |
 | `next <topic> [--left-out]` | the planned subtopics that are ready, the ones waiting, and the stubs left out; `--left-out` lists only those, grouped by the note that left each out |
 | `open <note>` | open a note in Obsidian and print its `obsidian://` link; `APPLEDORE_OPEN=0` only prints the link |
-| `check` | the vault's invariants, run after every write |
+| `check` | the vault's invariants and each subtopic's shape, run after every write; an error exits 1, a warning doesn't |
 | `mv <note> <new>` | rename or move a note, rewriting every link to it |
 | `convert` | legacy inline fields to YAML frontmatter |
 

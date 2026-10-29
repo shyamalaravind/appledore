@@ -13,12 +13,19 @@ navigate, which a big clean-up months later can't.
 
 ## 2. Review
 
-- **`appledore check`:** every warning on a touched note or chain: a MOC with two children or
-  fewer (dissolve it), a note with more than 30 children (split it, or group some under a MOC), a
-  subtopic outside 150–450 words (fix it as `writing-rules.md` rule 7 says), a learning graph out
-  of date.
-- **New children:** a note that now has children gets `![[Children.base]]` at the end of its body,
-  before Sources, so they're listed. One with five or more might be better as a MOC.
+- **`appledore check`:** every warning on a touched note or chain:
+  - a MOC with two children or fewer (dissolve it), or a note with more than 30 (split it, or
+    group some under a MOC);
+  - a subtopic outside 150–450 words (fix it as `writing-rules.md` rule 7 says), or one missing a
+    fixed part, with a Left out list outside 2–4 or with more than three bold terms (rules 7, 8,
+    10 and 11);
+  - a summary over 25 words (cut it to one sentence);
+  - a learning graph out of date;
+  - an empty or Untitled Base (delete it, or name it for what it lists).
+- **New children:** a `type: note` that now has children gets `![[Children.base]]` at the end of
+  its body, before Sources, so they're listed. One with five or more might be better as a MOC. A
+  topic or a subtopic never gets it, because its Learning graph or its Left out list already
+  lists its children.
 - **Duplicates:** `appledore find` on each new note's title, aliases and key words. Two notes on
   one concept are merged.
 - **Orphans:** the notes `appledore tree` lists outside every chain.
