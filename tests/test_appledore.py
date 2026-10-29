@@ -234,6 +234,37 @@ class QueryTests(VaultTest):
         self.assertEqual(warnings, [])
 
 
+class NextRecommendedTests(VaultTest):
+    """next names the node "next" writes: the shallowest ready one, ties in the drawing's order."""
+
+    def test_recommends_a_shallower_ready_node_from_a_later_branch(self):
+        self.small_vault()
+        self.write("Stubs/Batching.md", note("Batches.", ["Service Bus"], builds_on=["[[Peek-lock]]"]))
+        self.write("Stubs/Topics.md", note("Topics.", ["Service Bus"], builds_on=[]))
+        out, code = self.run_cli("next", "Service Bus")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out.splitlines()[:2], ["Service Bus: 3 subtopics written, 2 planned, 1 left out",
+                                                "recommended: Topics"])
+        ready = out.split("ready:")[1]
+        self.assertLess(ready.index("Batching"), ready.index("Topics"))  # drawn first, but deeper
+
+    def test_breaks_a_tie_in_depth_by_drawing_order(self):
+        self.small_vault()
+        self.write("Stubs/Auto-forwarding.md", note("Forwarding.", ["Service Bus"], builds_on=["[[Sessions]]"]))
+        self.write("Stubs/Batching.md", note("Batches.", ["Service Bus"], builds_on=["[[Peek-lock]]"]))
+        out, _ = self.run_cli("next", "Service Bus")
+        self.assertIn("recommended: Batching\n", out)  # under Peek-lock, drawn before Sessions, not by name
+
+    def test_no_recommendation_when_nothing_is_ready(self):
+        self.small_vault()
+        out, _ = self.run_cli("next", "Service Bus")
+        self.assertNotIn("recommended:", out)  # nothing planned
+        self.write("Stubs/Replay.md", note("Replay.", ["Service Bus"], builds_on=["[[Missing]]"]))
+        out, _ = self.run_cli("next", "Service Bus")
+        self.assertIn("Replay  [stub]  Replay.  (waits for: (unresolved))", out)
+        self.assertNotIn("recommended:", out)
+
+
 class TreeTests(VaultTest):
     LOOSE = ("outside every chain:\n"
              "  - Loose child  [note]  _Main Notes/Loose child.md\n"
