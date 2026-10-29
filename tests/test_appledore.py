@@ -1,4 +1,4 @@
-"""Tests for scripts/palace.py. Run: python3 -m unittest discover -s tests"""
+"""Tests for scripts/appledore.py. Run: python3 -m unittest discover -s tests"""
 
 import contextlib
 import io
@@ -11,8 +11,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-import palace  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "study" / "scripts"))
+import appledore  # noqa: E402
 
 
 def note(summary, mocs=(), **props):
@@ -52,14 +52,14 @@ class VaultTest(unittest.TestCase):
         path.write_text(text, encoding="utf-8")
 
     def vault(self):
-        return palace.Vault(self.root)
+        return appledore.Vault(self.root)
 
     def run_cli(self, *argv):
         out = io.StringIO()
         code = 0
         with contextlib.redirect_stdout(out):
             try:
-                palace.main(["--vault", str(self.root), *argv])
+                appledore.main(["--vault", str(self.root), *argv])
             except SystemExit as e:
                 code = e.code
         return out.getvalue(), code
@@ -77,7 +77,7 @@ class VaultTest(unittest.TestCase):
 
 class FrontmatterTests(unittest.TestCase):
     def test_block_and_flow_lists_and_quotes(self):
-        data = palace.parse_yaml(textwrap.dedent('''\
+        data = appledore.parse_yaml(textwrap.dedent('''\
             summary: "Start here: the maps."
             mocs:
               - "[[A MOC]]"
@@ -95,16 +95,16 @@ class FrontmatterTests(unittest.TestCase):
 
     def test_dump_round_trips(self):
         data = {"summary": "A: b #c", "mocs": ["[[X]]"], "aliases": [], "created": "2026-01-02"}
-        self.assertEqual(palace.parse_yaml(palace.dump_yaml(data)), data)
+        self.assertEqual(appledore.parse_yaml(appledore.dump_yaml(data)), data)
 
 
 class ConvertTests(unittest.TestCase):
     def test_learning_template_note(self):
         old = ("\n**date**: 2025-06-23\n**source:** Chat gpt\n**MOCs**: [[Azure Cloud]], [[Server Less]]]]\n"
                "**tags:** #\n\n---\n\n\n\n# Summary\nText.\n")
-        new = palace.convert_text(old)
-        fm, body = palace.split_frontmatter(new)
-        data = palace.parse_yaml(fm)
+        new = appledore.convert_text(old)
+        fm, body = appledore.split_frontmatter(new)
+        data = appledore.parse_yaml(fm)
         self.assertEqual(data["mocs"], ["[[Azure Cloud]]", "[[Server Less]]"])
         self.assertEqual(data["created"], "2025-06-23")
         self.assertNotIn("tags", data)
@@ -112,16 +112,16 @@ class ConvertTests(unittest.TestCase):
         self.assertIn("## Sources\n- Chat gpt", body)
 
     def test_variants(self):
-        self.assertIn('  - "[[Front End]]"', palace.convert_text("**MOCs*: [[Front End]]\n\nThe code.\n"))
-        self.assertIn("mocs: []", palace.convert_text("**date**: 2025-06-19\n**MOCs**: [[]]\n**tags:** #\n\n---\n"))
-        moved = palace.convert_text('---\nReferences: "[[Web Protocols]]"\n---\n\nHTTP/2.\n')
+        self.assertIn('  - "[[Front End]]"', appledore.convert_text("**MOCs*: [[Front End]]\n\nThe code.\n"))
+        self.assertIn("mocs: []", appledore.convert_text("**date**: 2025-06-19\n**MOCs**: [[]]\n**tags:** #\n\n---\n"))
+        moved = appledore.convert_text('---\nReferences: "[[Web Protocols]]"\n---\n\nHTTP/2.\n')
         self.assertIn('mocs:\n  - "[[Web Protocols]]"', moved)
         self.assertNotIn("References", moved)
-        self.assertNotIn("Sources", palace.convert_text('**source:** "" # Book, article\n**MOCs**: [[A]]\n'))
+        self.assertNotIn("Sources", appledore.convert_text('**source:** "" # Book, article\n**MOCs**: [[A]]\n'))
 
     def test_nothing_to_convert(self):
-        self.assertIsNone(palace.convert_text("Just a body with **bold**: text.\n"))
-        self.assertIsNone(palace.convert_text(note("x", ["A"])))
+        self.assertIsNone(appledore.convert_text("Just a body with **bold**: text.\n"))
+        self.assertIsNone(appledore.convert_text(note("x", ["A"])))
 
 
 class QueryTests(VaultTest):
@@ -188,7 +188,7 @@ class QueryTests(VaultTest):
         self.assertIn("Replay  [stub]  Replay.  (waits for: Dead-letter)", out.split("waiting:")[1])
         self.assertIn("AMQP  [stub]  The wire protocol.  (left out by: Queue)", out.split("left out:")[1])
         self.run_cli("graph", "Service Bus", "--write")
-        self.assertEqual(palace.check(self.vault()), ([], []))
+        self.assertEqual(appledore.check(self.vault()), ([], []))
 
     def test_next_left_out_groups_the_stubs_by_the_note_that_left_them_out(self):
         self.small_vault()
@@ -226,10 +226,10 @@ class QueryTests(VaultTest):
         self.small_vault()
         self.run_cli("graph", "Service Bus", "--write")
         text = (self.root / "_Main Notes/Service Bus.md").read_text()
-        self.assertIn(palace.GRAPH_COMMENT + "\n- [[Queue]]\n  - [[Peek-lock]]", text)
+        self.assertIn(appledore.GRAPH_COMMENT + "\n- [[Queue]]\n  - [[Peek-lock]]", text)
         self.assertNotIn("[[Old]]", text)
         self.assertTrue(text.endswith("## Sources\n- x\n"))
-        errors, warnings = palace.check(self.vault())
+        errors, warnings = appledore.check(self.vault())
         self.assertEqual(errors, [])
         self.assertEqual(warnings, [])
 
@@ -302,7 +302,7 @@ class TreeTests(VaultTest):
 
 class CheckTests(VaultTest):
     def messages(self):
-        errors, warnings = palace.check(self.vault())
+        errors, warnings = appledore.check(self.vault())
         return [m for _, m in errors], [m for _, m in warnings]
 
     def test_clean_vault(self):
@@ -411,7 +411,7 @@ class CheckTests(VaultTest):
         self.write("_Main Notes/Dead-letter queue.md", note("Dead letters.", ["Azure MOC"], type="note", aliases=["DLQ"]))
         self.write("_Main Notes/Message queues.md", note("Queues and their Dead-letter queue.", ["Azure MOC"], type="note")
                    + textwrap.dedent(body))
-        _, warnings = palace.check(self.vault())
+        _, warnings = appledore.check(self.vault())
         return [(rel, m) for rel, m in warnings if "never links" in m]
 
     def test_unlinked_mention_warns_once_at_its_first_mention(self):
@@ -493,7 +493,7 @@ class MoveTests(VaultTest):
 
 
 class OpenTests(VaultTest):
-    """palace open builds the commands; subprocess.run and Popen are mocked, so nothing launches."""
+    """appledore open builds the commands; subprocess.run and Popen are mocked, so nothing launches."""
 
     LINK = "obsidian://open?vault=Mind%20palace&file=_Main%20Notes%2FPeek-lock"
     CLI_OPEN = ["obsidian", "vault=Mind palace", "open", "path=_Main Notes/Peek-lock.md"]
@@ -502,14 +502,14 @@ class OpenTests(VaultTest):
     def setUp(self):
         super().setUp()
         self.small_vault()
-        env = mock.patch.dict(palace.os.environ)
+        env = mock.patch.dict(appledore.os.environ)
         env.start()
         self.addCleanup(env.stop)
-        for name in ("PALACE_OPEN", "DISPLAY", "WAYLAND_DISPLAY"):
-            palace.os.environ.pop(name, None)
+        for name in ("APPLEDORE_OPEN", "PALACE_OPEN", "DISPLAY", "WAYLAND_DISPLAY"):
+            appledore.os.environ.pop(name, None)
 
     def open(self, outputs=None, which=("obsidian", "open", "xdg-open"), platform="darwin", name="Peek-lock"):
-        """Run palace open with the given programs on PATH; outputs maps a program to its stdout, to
+        """Run appledore open with the given programs on PATH; outputs maps a program to its stdout, to
         None for a nonzero exit, or to HANGS for one still running at the timeout. Returns (stdout
         lines, the commands run); self.opener_kwargs holds how the system's opener was started."""
         outputs, commands = outputs or {}, []
@@ -533,21 +533,21 @@ class OpenTests(VaultTest):
                 process.wait.return_value = 1 if out is None else 0
             return process
 
-        with mock.patch.object(palace.shutil, "which", lambda name: f"/bin/{name}" if name in which else None), \
-                mock.patch.object(palace.subprocess, "run", side_effect=fake_run), \
-                mock.patch.object(palace.subprocess, "Popen", side_effect=fake_popen), \
-                mock.patch.object(palace.sys, "platform", platform):
+        with mock.patch.object(appledore.shutil, "which", lambda name: f"/bin/{name}" if name in which else None), \
+                mock.patch.object(appledore.subprocess, "run", side_effect=fake_run), \
+                mock.patch.object(appledore.subprocess, "Popen", side_effect=fake_popen), \
+                mock.patch.object(appledore.sys, "platform", platform):
             out, code = self.run_cli("open", name)
         self.assertEqual(code, 0, out)
         return out.splitlines(), commands
 
     def test_the_link_is_url_encoded(self):
-        self.assertEqual(palace.obsidian_uri(self.vault(), self.vault().get("Peek-lock")), self.LINK)
+        self.assertEqual(appledore.obsidian_uri(self.vault(), self.vault().get("Peek-lock")), self.LINK)
         root = Path(self.tmp.name) / "Notes & ideas #2"
         (root / "_Main Notes").mkdir(parents=True)
         (root / "_Main Notes/Café + tea & 100% = yes.md").write_text(note("x", ["A"], type="note"), encoding="utf-8")
-        v = palace.Vault(root)
-        self.assertEqual(palace.obsidian_uri(v, v.get("Café + tea & 100% = yes")),
+        v = appledore.Vault(root)
+        self.assertEqual(appledore.obsidian_uri(v, v.get("Café + tea & 100% = yes")),
                          "obsidian://open?vault=Notes%20%26%20ideas%20%232"
                          "&file=_Main%20Notes%2FCaf%C3%A9%20%2B%20tea%20%26%20100%25%20%3D%20yes")
 
@@ -573,45 +573,87 @@ class OpenTests(VaultTest):
         self.assertEqual(commands, [["obsidian", "version"], self.CLI_OPEN, ["open", self.LINK]])
         _, commands = self.open({"version": self.HANGS})
         self.assertEqual(commands, [["obsidian", "version"], ["open", self.LINK]])
-        palace.os.environ["WAYLAND_DISPLAY"] = "wayland-0"
+        appledore.os.environ["WAYLAND_DISPLAY"] = "wayland-0"
         _, commands = self.open(which=("xdg-open",), platform="linux")
         self.assertEqual(commands, [["xdg-open", self.LINK]])
 
     def test_the_opener_runs_detached_and_may_stay_in_the_foreground(self):
         # An app the opener starts would otherwise hold its output open until the timeout.
-        palace.os.environ["DISPLAY"] = ":0"
+        appledore.os.environ["DISPLAY"] = ":0"
         lines, _ = self.open({"xdg-open": self.HANGS}, which=("xdg-open",), platform="linux")
         self.assertEqual(self.opener_kwargs, {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,
                                               "stderr": subprocess.DEVNULL, "start_new_session": True})
         self.assertEqual(lines[1], "opened through the obsidian:// link")
 
     def test_windows_uses_start(self):
-        with mock.patch.object(palace.os, "startfile", create=True) as startfile:
+        with mock.patch.object(appledore.os, "startfile", create=True) as startfile:
             lines, commands = self.open(which=(), platform="win32")
         startfile.assert_called_once_with(self.LINK)
         self.assertEqual(lines[1], "opened through the obsidian:// link")
 
     def test_only_the_link_when_turned_off_or_nothing_opens(self):
-        palace.os.environ["PALACE_OPEN"] = "0"
+        appledore.os.environ["APPLEDORE_OPEN"] = "0"
         lines, commands = self.open()
-        self.assertEqual((lines, commands), ([self.LINK, "not opened: PALACE_OPEN=0"], []))
-        del palace.os.environ["PALACE_OPEN"]
+        self.assertEqual((lines, commands), ([self.LINK, "not opened: APPLEDORE_OPEN=0"], []))
+        del appledore.os.environ["APPLEDORE_OPEN"]
+        appledore.os.environ["PALACE_OPEN"] = "0"  # the old name, read with a notice until the next version
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            lines, commands = self.open()
+        self.assertEqual((lines, commands), ([self.LINK, "not opened: APPLEDORE_OPEN=0"], []))
+        self.assertIn("PALACE_OPEN is now APPLEDORE_OPEN", err.getvalue())
+        del appledore.os.environ["PALACE_OPEN"]
         lines, commands = self.open(which=("xdg-open",), platform="linux")  # no desktop
         self.assertEqual((lines, commands), ([self.LINK, "not opened: no desktop (DISPLAY and WAYLAND_DISPLAY are unset)"], []))
-        palace.os.environ["DISPLAY"] = ":0"
+        appledore.os.environ["DISPLAY"] = ":0"
         lines, _ = self.open(which=(), platform="linux")
         self.assertEqual(lines[0], self.LINK)
         self.assertTrue(lines[1].startswith("not opened"))
         lines, _ = self.open({"version": None, "open": None})
         self.assertTrue(lines[1].startswith("not opened"))
-        with mock.patch.object(palace.os, "startfile", create=True, side_effect=OSError):
+        with mock.patch.object(appledore.os, "startfile", create=True, side_effect=OSError):
             lines, _ = self.open(which=(), platform="win32")
         self.assertTrue(lines[1].startswith("not opened"))
 
     def test_a_reply_that_isnt_utf_8_or_never_comes(self):
         reply = [sys.executable, "-c", "import sys; sys.stdout.buffer.write(b'Opened: \\x81')"]
-        self.assertEqual(palace.try_run(reply), "Opened: \ufffd")
-        self.assertIsNone(palace.try_run([sys.executable, "-c", "import time; time.sleep(10)"], timeout=0.2))
+        self.assertEqual(appledore.try_run(reply), "Opened: \ufffd")
+        self.assertIsNone(appledore.try_run([sys.executable, "-c", "import time; time.sleep(10)"], timeout=0.2))
+
+
+class VaultVariableTests(VaultTest):
+    """APPLEDORE_VAULT, and PALACE_VAULT, the old name, read with a notice until the next version."""
+
+    def setUp(self):
+        super().setUp()
+        self.small_vault()
+        env = mock.patch.dict(appledore.os.environ)
+        env.start()
+        self.addCleanup(env.stop)
+        for name in ("APPLEDORE_VAULT", "PALACE_VAULT"):
+            appledore.os.environ.pop(name, None)
+
+    def find_queue(self):
+        """Run appledore find with no --vault, and return (stdout, stderr)."""
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            appledore.main(["find", "Queue"])
+        return out.getvalue(), err.getvalue()
+
+    def test_the_new_name(self):
+        appledore.os.environ["APPLEDORE_VAULT"] = str(self.root)
+        self.assertEqual(self.find_queue(), ("_Main Notes/Queue.md  [subtopic]  Queues.\n", ""))
+
+    def test_the_old_name_with_a_notice(self):
+        appledore.os.environ["PALACE_VAULT"] = str(self.root)
+        out, err = self.find_queue()
+        self.assertEqual(out, "_Main Notes/Queue.md  [subtopic]  Queues.\n")
+        self.assertIn("PALACE_VAULT is now APPLEDORE_VAULT", err)
+
+    def test_the_new_name_wins(self):
+        appledore.os.environ["APPLEDORE_VAULT"] = str(self.root)
+        appledore.os.environ["PALACE_VAULT"] = str(self.root / "missing")
+        self.assertEqual(self.find_queue(), ("_Main Notes/Queue.md  [subtopic]  Queues.\n", ""))
 
 
 if __name__ == "__main__":

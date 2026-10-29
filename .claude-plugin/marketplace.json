@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "appledore",
-      "description": "Plan a topic as a learning graph, read it one bite-sized subtopic at a time, and file every answer about it into your Obsidian vault.",
+      "description": "One skill, /appledore:study: plan a topic as a learning graph, read it one bite-sized subtopic at a time, and file every answer about it into your Obsidian vault.",
       "source": "./",
       "category": "productivity"
     }

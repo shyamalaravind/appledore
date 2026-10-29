@@ -1,18 +1,4 @@
----
-name: file
-description: >-
-  Step of the appledore study loop: answer a question the user asks about the subject they're
-  learning, from the agreed sources, then offer in one line to file the answer where it belongs in
-  the vault (inside one or more topic or subtopic notes, or a new subtopic when it fits none) and
-  write it after their yes. Use only inside a study session that the appledore study skill
-  started, whenever the user asks such a question. Not for questions about the session, the plan,
-  the vault, appledore or the agent's own actions: answer those directly.
----
-
 # File
-
-This runs inside an appledore study session. If the `study` skill isn't loaded, load it first: it
-sets up `palace` and holds the rules every step follows.
 
 This step is only for a question about the topic's subject: answer any other question directly,
 and file nothing.
@@ -24,13 +10,12 @@ each note keeps everything known about its concept.
 ## 1. Answer
 
 Answer in the chat, briefly, from the agreed sources, and name the page each claim comes from.
-When the sources don't cover the question, say so ("The agreed sources don't cover this"), never
-answer from memory, and agree a source with the user first, as the `study` skill's rule 4 says.
+When they don't cover the question, answer nothing from memory: study rule 4 says what to do.
 
 ## 2. Look
 
-- `palace find` on the question's concepts, because the vault may already answer it.
-- `palace related` on the note the user is reading, for the notes around it.
+- `appledore find` on the question's concepts, because the vault may already answer it.
+- `appledore related` on the note the user is reading, for the notes around it.
 
 ## 3. Offer to file it
 
@@ -54,9 +39,9 @@ rest of the session, until they ask for it back. A "file this" still files that 
 1. Write each passage to `writing-rules.md` rules 13 and 14.
 2. **Check the size.** If a subtopic goes past 450 words, propose the fix `writing-rules.md`
    rule 7 gives, and make it on the user's yes.
-3. For a new subtopic, create its stub in `Stubs/` as `plan` does, run
-   `palace graph "<topic>" --write`, and use `learn` to write it, around the question.
-4. `palace check`.
+3. For a new subtopic, create its stub in `Stubs/` as `plan` step 4 does, run
+   `appledore graph "<topic>" --write`, and use `learn` to write it, around the question.
+4. `appledore check`.
 
-Then open the note to read first with `palace open`, unless `learn` already opened one in step 4,
-give the links of the notes that changed, and wait for the user's next message.
+Then open the note to read first with `appledore open`, unless `learn` already opened one in
+step 4, give the links of the notes that changed, and wait for the user's next message.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The Mind Palace's index. Every query reads the notes themselves, so it never drifts.
 
-Usage: palace.py [--vault PATH] COMMAND ...
+Usage: appledore.py [--vault PATH] COMMAND ...
 
   find QUERY [--kind K] [--body]      notes whose title, aliases or summary match QUERY
   tree [MOC] [--depth N] [--summary] [--mocs]
@@ -17,9 +17,9 @@ Usage: palace.py [--vault PATH] COMMAND ...
   open NOTE                           open a note in Obsidian, and print its obsidian:// link
 
 NOTE is a title, an alias or a path inside the vault. The vault defaults to
-~/work-space/Solenya/Mind palace; set PALACE_VAULT or pass --vault to use another.
+~/work-space/Solenya/Mind palace; set APPLEDORE_VAULT or pass --vault to use another.
 open uses the Obsidian command line interface when it is turned on, and the
-system's opener with the obsidian:// link otherwise; PALACE_OPEN=0 only prints the link.
+system's opener with the obsidian:// link otherwise; APPLEDORE_OPEN=0 only prints the link.
 There is no stored index: each call parses the vault's Markdown. Python 3.8+,
 standard library only.
 """
@@ -69,7 +69,7 @@ MAX_CONCEPTS = 3      # bold concept labels in a subtopic (writing rule 7)
 LEFT_OUT = (2, 4)     # topics under a subtopic's Left out on purpose (writing rule 11)
 SUBTOPIC_WORDS = (150, 450)
 GRAPH_COMMENT = ("%% Derived from the subtopics' and planned stubs' builds_on and the stubs' mocs by "
-                 "palace.py graph. Regenerate; don't edit by hand. %%")
+                 "appledore.py graph. Regenerate; don't edit by hand. %%")
 
 LINK = re.compile(r"(!?)\[\[([^\[\]]*?)\]\]")
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -97,8 +97,18 @@ GOAL = re.compile(r"^[ \t]*[-*][ \t]+\*\*Goal(?::\*\*|\*\*:)(.*)$", re.M)  # a t
 
 
 def die(message: str, code: int = 2) -> None:
-    print(f"palace.py: {message}", file=sys.stderr)
+    print(f"appledore.py: {message}", file=sys.stderr)
     sys.exit(code)
+
+
+def env(name: str):
+    """APPLEDORE_<name>, or the old PALACE_<name> with a notice, until the next version drops it."""
+    value = os.environ.get(f"APPLEDORE_{name}")
+    if value is None and f"PALACE_{name}" in os.environ:
+        print(f"appledore.py: PALACE_{name} is now APPLEDORE_{name}; the old name stops working in the next version",
+              file=sys.stderr)
+        value = os.environ[f"PALACE_{name}"]
+    return value
 
 
 # ---------------------------------------------------------------- frontmatter
@@ -433,7 +443,7 @@ class Vault:
             return hits[0]
         if len(hits) > 1:
             die(f"{name!r} is an alias of several notes: " + ", ".join(str(n.rel) for n in hits))
-        die(f"no note named {name!r}; try: palace.py find {name!r}")
+        die(f"no note named {name!r}; try: appledore.py find {name!r}")
 
     def note_links(self, note: Note, key: str) -> list:
         return [self.resolve(link.name) for link in note.prop_links(key)]
@@ -864,7 +874,7 @@ def check(vault: Vault):
             err(n, "empty file: make it a stub (summary + mocs) or delete it")
             continue
         if LEGACY_IN_BODY.search(n.body):
-            err(n, "legacy inline fields (**MOCs**: …): run palace.py convert")
+            err(n, "legacy inline fields (**MOCs**: …): run appledore.py convert")
         for link in n.all_links():
             if vault.resolve(link.name) is None:
                 where = link.where if isinstance(link.where, str) else f"line {link.where}"
@@ -992,7 +1002,7 @@ def check(vault: Vault):
             if drawn is None:
                 warn(n, "no ## Learning graph section")
             elif drawn != lines:
-                warn(n, f"the learning graph is out of date: run palace.py graph {n.title!r} --write")
+                warn(n, f"the learning graph is out of date: run appledore.py graph {n.title!r} --write")
 
     # builds_on cycles across the whole vault
     state = {}
@@ -1191,8 +1201,8 @@ def start_opener(command, wait=5) -> bool:
 
 def open_in_obsidian(vault: Vault, note: Note) -> str:
     """Open a note in the running Obsidian app, and say how, or why it didn't."""
-    if os.environ.get("PALACE_OPEN") == "0":
-        return "not opened: PALACE_OPEN=0"
+    if env("OPEN") == "0":
+        return "not opened: APPLEDORE_OPEN=0"
     # The CLI answers even when it is turned off (Settings → General → Advanced), so a
     # version number is what says it's on, and "Opened: <path>" that the open worked.
     if shutil.which("obsidian") and re.match(r"\d", try_run(["obsidian", "version"]) or ""):
@@ -1223,9 +1233,9 @@ def cmd_open(vault: Vault, args):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog="palace.py", description=__doc__.split("\n")[0],
+    parser = argparse.ArgumentParser(prog="appledore.py", description=__doc__.split("\n")[0],
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--vault", default=os.environ.get("PALACE_VAULT", str(DEFAULT_VAULT)))
+    parser.add_argument("--vault", default=env("VAULT") or str(DEFAULT_VAULT))
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("find", help="notes whose title, aliases or summary match")
