@@ -1,6 +1,6 @@
 ---
 name: cold-reader
-description: Cold read of one appledore subtopic, for the learn skill's step 5. It has no tools and no project files, so the brief must hold everything: the text of skills/learn/cold-read.md, the reader, and the note's numbered text.
+description: Cold read of one appledore subtopic, for step 5 of the study skill's learn step. It has no tools and no project files, so the brief must hold everything: the text of skills/study/cold-read.md, the reader, and the note's numbered text.
 tools: []
 omitClaudeMd: true
 effort: high

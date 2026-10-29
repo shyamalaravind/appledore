@@ -4,7 +4,7 @@ For a learning graph's notes (topic notes, subtopics and passages filed into the
 
 ## Every note
 
-1. **State only what the agreed sources say.** Trace every number and "how it works" claim to one of the pages. Never fill in a claim none of them states, from memory or anywhere else: leave it out, and tell the user what's missing so the two of you can agree a source for it. Keep numbers exact, and quote at most two sentences. Name a source in the line only for a judgment, such as a threshold or a "typical" value, or where sources disagree; any other claim needs only its page in Sources. Link a volatile fact, such as a limit or price, to its page. Because: memory mixes up versions and products, and the reader can't tell which line is wrong.
+1. **Trace every claim to an agreed source.** Every number and "how it works" claim comes from one of the pages, and study rule 4 says what to do when none of them states it. Keep numbers exact, and quote at most two sentences. Name a source in the line only for a judgment, such as a threshold or a "typical" value, or where sources disagree; any other claim needs only its page in Sources. Link a volatile fact, such as a limit or price, to its page. Because: the reader can check an exact number or a linked fact on its page, and a judgment differs from one source to the next.
 
 2. **Build on what the reader knows.** A comparison with something they know may take one bullet, with where it stops holding in the same bullet or the one under it. Because: a comparison that silently breaks teaches the wrong model.
 
