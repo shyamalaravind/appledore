@@ -3,7 +3,7 @@ name: subject-question-offers-filing
 description: >-
   A question about the subject gets a short answer from the agreed sources and ends with a
   one-line offer to file it, and nothing is written before the user's yes.
-tags: [file]
+tags: [file, read-only]
 context:
   scaffold_script: scaffold.sh
 execution:

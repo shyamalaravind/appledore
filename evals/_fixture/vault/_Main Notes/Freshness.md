@@ -1,5 +1,5 @@
 ---
-summary: "A stored response is fresh while its age is below the lifetime that max-age or Expires sets, and a fresh response is reused without asking the origin."
+summary: "A stored response is fresh while its age is under the lifetime from max-age or Expires, and is then reused without asking the origin."
 type: subtopic
 mocs:
   - "[[HTTP caching]]"

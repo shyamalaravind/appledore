@@ -3,7 +3,7 @@ name: sources-dont-cover
 description: >-
   A question the agreed sources don't cover gets "the agreed sources don't cover it" and a
   proposal of pages, never an answer from memory.
-tags: [file, sources]
+tags: [file, sources, read-only]
 context:
   scaffold_script: scaffold.sh
 execution:

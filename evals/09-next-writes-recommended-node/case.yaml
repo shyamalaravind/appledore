@@ -1,0 +1,17 @@
+schema_version: "1.1"
+name: next-writes-recommended-node
+description: >-
+  "next" with two ready nodes writes the one `appledore next` prints as recommended, the shallower
+  one in the learning graph, without asking which to write.
+tags: [learn]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  prompt: >-
+    Continue studying HTTP caching: next.
+  max_turns: 80
+  timeout_seconds: 1200
+  allowed_tools: [Read, Glob, Grep, Skill, Bash, Write, Edit]
+  append_system_prompt: >-
+    The study vault for this session is the folder `vault` in the current working directory, and
+    the shell sets APPLEDORE_VAULT to it.

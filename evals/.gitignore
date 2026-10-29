@@ -1,1 +1,4 @@
 results/
+# A resumed case's run writes the session's transcript beside its history.jsonl, named for the
+# session id the history gives; it holds the operator's real paths.
+00000000-*.jsonl
