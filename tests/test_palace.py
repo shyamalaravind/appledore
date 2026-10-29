@@ -29,6 +29,14 @@ def note(summary, mocs=(), **props):
     return "\n".join(lines) + "\n"
 
 
+def shaped(words):
+    """A subtopic's body with every fixed part (writing rules 8, 10 and 11), `words` words long; the
+    parts themselves are 34 words."""
+    return ("**In short:** " + "words " * (words - 34) + "\n**Example:** queue `orders` holds 3 messages.\n\n"
+            "## In an interview\n- Say which delivery mode fits.\n\n## Left out on purpose\n"
+            "- Ordering: how are messages kept in order?\n- Retries: how often is a message tried again?\n")
+
+
 class VaultTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -61,9 +69,9 @@ class VaultTest(unittest.TestCase):
         self.write("_-MOCs/Children.base", "filters:\n  and:\n    - mocs.contains(this)\n")
         self.write("_Main Notes/Service Bus.md", note("A topic.", ["Azure MOC"], type="topic", status="learning")
                    + "## Learning graph\n%% derived %%\n- [[Old]]\n\n## Sources\n- x\n")
-        self.write("_Main Notes/Queue.md", note("Queues.", ["Service Bus"], type="subtopic", builds_on=[]) + "words " * 400)
-        self.write("_Main Notes/Peek-lock.md", note("Locks.", ["Service Bus"], type="subtopic", builds_on=["[[Queue]]"]) + "words " * 400)
-        self.write("_Main Notes/Sessions.md", note("Sessions.", ["Service Bus"], type="subtopic", builds_on=["[[Queue]]"]) + "words " * 400)
+        self.write("_Main Notes/Queue.md", note("Queues.", ["Service Bus"], type="subtopic", builds_on=[]) + shaped(400))
+        self.write("_Main Notes/Peek-lock.md", note("Locks.", ["Service Bus"], type="subtopic", builds_on=["[[Queue]]"]) + shaped(400))
+        self.write("_Main Notes/Sessions.md", note("Sessions.", ["Service Bus"], type="subtopic", builds_on=["[[Queue]]"]) + shaped(400))
         self.write("Stubs/AMQP.md", note("The wire protocol.", ["Queue"]))
 
 
@@ -159,7 +167,7 @@ class QueryTests(VaultTest):
         self.small_vault()
         v = self.vault()
         lines, warnings = v.learning_graph(v.get("Service Bus"))
-        self.assertEqual(lines, ["- [[Queue]]", "  - [[Peek-lock]]", "  - [[Sessions]]", "  - [[AMQP]] · stub"])
+        self.assertEqual(lines, ["- [[Queue]]", "  - [[Peek-lock]]", "  - [[Sessions]]", "  - [[AMQP]] · left out"])
         self.assertEqual(warnings, [])
 
     def test_planned_stubs_sit_in_the_tree_and_next_sorts_them(self):
@@ -170,7 +178,7 @@ class QueryTests(VaultTest):
         v = self.vault()
         lines, _ = v.learning_graph(v.get("Service Bus"))
         self.assertEqual(lines, ["- [[Queue]]", "  - [[Peek-lock]]", "    - [[Dead-letter]] · stub",
-                                 "      - [[Replay]] · stub", "  - [[Sessions]]", "  - [[AMQP]] · stub",
+                                 "      - [[Replay]] · stub", "  - [[Sessions]]", "  - [[AMQP]] · left out",
                                  "- [[Topics]] · stub"])
         out, _ = self.run_cli("next", "Service Bus")
         self.assertIn("Service Bus: 3 subtopics written, 3 planned, 1 left out", out)
@@ -226,6 +234,72 @@ class QueryTests(VaultTest):
         self.assertEqual(warnings, [])
 
 
+class TreeTests(VaultTest):
+    LOOSE = ("outside every chain:\n"
+             "  - Loose child  [note]  _Main Notes/Loose child.md\n"
+             "  - Loose  [note]  _Main Notes/Loose.md\n")
+
+    def setUp(self):
+        super().setUp()
+        self.small_vault()
+        self.write("_-MOCs/Messaging MOC.md", note("Messaging services.", ["Azure MOC"]) + "![[Children.base]]\n")
+        self.write("_Main Notes/Event Grid.md", note("Events.", ["Messaging MOC"], type="note"))
+        self.write("_Main Notes/Push delivery.md", note("Push.", ["Event Grid"], type="note"))
+        self.write("_Main Notes/Compute.md", note("Run code.", ["Azure MOC"], type="note"))
+        self.write("_Main Notes/Container Apps.md", note("Containers.", ["Compute", "Azure MOC"], type="note"))
+        self.write("_Main Notes/Functions.md", note("Functions.", ["Compute"], type="note"))
+        self.write("_Main Notes/Triggers.md", note("Triggers.", ["Functions"], type="note"))
+        self.write("_Main Notes/Durable Functions.md", note("Workflows in code.", ["Functions"], type="topic", status="learning"))
+        self.write("_Main Notes/Loose.md", note("Nowhere.", type="note"))
+        self.write("_Main Notes/Loose child.md", note("Under Loose.", ["Loose"], type="note"))
+
+    def test_the_whole_tree(self):
+        out, _ = self.run_cli("tree")
+        self.assertEqual(out, "Azure MOC  [moc]\n"
+                              "  - Messaging MOC  [moc]\n"
+                              "    - Event Grid  [note]\n"
+                              "      - Push delivery  [note]\n"
+                              "  - Compute  [note]\n"
+                              "    - Container Apps  [note]\n"
+                              "    - Functions  [note]\n"
+                              "      - Durable Functions  [topic]\n"
+                              "      - Triggers  [note]\n"
+                              "  - Container Apps  [note]  (main place: Compute  [note])\n"
+                              "  - Service Bus  [topic]\n"
+                              "    - Peek-lock  [subtopic]\n"
+                              "    - Queue  [subtopic]\n"
+                              "      - AMQP  [stub]\n"
+                              "    - Sessions  [subtopic]\n" + self.LOOSE)
+
+    def test_depth_cuts_the_drawing_but_not_the_chains(self):
+        # Notes below the cut-off still sit in a chain, so only the real orphans are outside one.
+        out, _ = self.run_cli("tree", "--depth", "1")
+        self.assertEqual(out, "Azure MOC  [moc]\n"
+                              "  - Messaging MOC  [moc]\n"
+                              "  - Compute  [note]\n"
+                              "  - Container Apps  [note]  (main place: Compute  [note])\n"
+                              "  - Service Bus  [topic]\n" + self.LOOSE)
+
+    def test_mocs_keeps_the_mocs_the_topics_and_the_notes_directly_under_a_moc(self):
+        out, _ = self.run_cli("tree", "--mocs")
+        self.assertEqual(out, "Azure MOC  [moc]  Azure.\n"
+                              "  - Messaging MOC  [moc]  Messaging services.\n"
+                              "    - Event Grid  [note]\n"
+                              "  - Compute  [note]\n"
+                              "    - Functions  [note]\n"
+                              "      - Durable Functions  [topic]  Workflows in code.\n"
+                              "  - Container Apps  [note]  (main place: Compute  [note])\n"
+                              "  - Service Bus  [topic]  A topic.\n" + self.LOOSE)
+
+    def test_one_notes_subtree_with_summaries(self):
+        out, _ = self.run_cli("tree", "Compute", "--summary")
+        self.assertEqual(out, "Compute  [note]  Run code.\n"
+                              "  - Container Apps  [note]  Containers.\n"
+                              "  - Functions  [note]  Functions.\n"
+                              "    - Durable Functions  [topic]  Workflows in code.\n"
+                              "    - Triggers  [note]  Triggers.\n")
+
+
 class CheckTests(VaultTest):
     def messages(self):
         errors, warnings = palace.check(self.vault())
@@ -257,7 +331,7 @@ class CheckTests(VaultTest):
         self.run_cli("graph", "Service Bus", "--write")
         _, warnings = self.messages()
         self.assertTrue(any("500 words across 2 note(s)" in m for m in warnings))
-        self.write("_Main Notes/Session state.md", note("State.", ["Service Bus"], type="subtopic", builds_on=["[[Sessions]]"]) + "words " * 200)
+        self.write("_Main Notes/Session state.md", note("State.", ["Service Bus"], type="subtopic", builds_on=["[[Sessions]]"]) + shaped(200))
         self.run_cli("graph", "Service Bus", "--write")
         self.assertEqual(self.messages(), ([], []))
 
@@ -271,6 +345,60 @@ class CheckTests(VaultTest):
         self.assertTrue(any("subtopic's mocs is its topic" in m for m in warnings))
         self.assertTrue(any("50 words" in m for m in warnings))
         self.assertTrue(any("out of date" in m for m in warnings))
+
+    def test_a_summary_past_25_words(self):
+        self.small_vault()
+        self.write("Stubs/Long.md", note(" ".join(["word"] * 26), ["Queue"]))
+        self.write("Stubs/Linked.md", note(" ".join(["word"] * 24) + " [[Queue|it]]", ["Queue"]))  # a link counts as its shown text
+        self.run_cli("graph", "Service Bus", "--write")
+        self.assertEqual(self.messages(), ([], ["summary has 26 words; one sentence of at most 25"]))
+
+    def test_subtopic_shape(self):
+        self.small_vault()
+        self.write("_Main Notes/Sessions.md", note("Sessions.", ["Service Bus"], type="subtopic", builds_on=["[[Queue]]"])
+                   + "**In short:** one.\n\n## Locks\n- **Lock:** a.\n- **Renewal:** b.\n- **Timeout:** c, not **always**.\n"
+                   + "words " * 200 + "\n\n## Left out on purpose\n- a\n- b\n- c\n- d\n- e\n")
+        self.write("_Main Notes/Session state.md", note("State.", ["Sessions"], type="subtopic", builds_on=[])
+                   + "- **Sticky:** e.\n")  # part of the Sessions subtopic, so its bold term counts there
+        self.run_cli("graph", "Service Bus", "--write")
+        shape = [m for m in self.messages()[1] if "words" not in m]
+        self.assertEqual(shape, [
+            "no **Example:**, ## In an interview; a subtopic opens with **In short:** and **Example:** "
+            "and ends with ## In an interview and ## Left out on purpose",
+            "5 topics under Left out on purpose; list 2–4",
+            "5 bold terms across 2 note(s); a subtopic bolds only its new concepts, at most 3"])
+        # Writing rule 10: a goal that isn't interviews names the closing section after its own use.
+        topic = (self.root / "_Main Notes/Service Bus.md").read_text()
+        self.write("_Main Notes/Service Bus.md", topic.replace("## Learning graph", "## Scope\n- **Goal:** run queues at work.\n\n## Learning graph"))
+        self.assertIn("no **Example:**; a subtopic opens with **In short:** and **Example:** "
+                      "and ends with ## In an interview and ## Left out on purpose", self.messages()[1])
+
+    def test_children_base_only_on_a_moc_or_a_note(self):
+        self.small_vault()
+        topic = (self.root / "_Main Notes/Service Bus.md").read_text()
+        self.write("_Main Notes/Service Bus.md", topic.replace("## Learning graph", "![[Children.base]]\n\n## Learning graph"))
+        self.write("_Main Notes/Queue.md", note("Queues.", ["Service Bus"], type="subtopic", builds_on=[])
+                   + shaped(400) + "\n![[Children.base]]\n")
+        self.write("_Main Notes/Hub.md", note("A hub.", ["Azure MOC"], type="note") + "![[Children.base]]\n")
+        self.write("_Main Notes/Spoke.md", note("Under the hub.", ["Hub"], type="note"))
+        self.run_cli("graph", "Service Bus", "--write")
+        self.assertEqual([m for m in self.messages()[1] if "Children.base" in m], [
+            "embeds Children.base, which only a MOC or a type: note needs; its Left out list already shows its children",
+            "embeds Children.base, which only a MOC or a type: note needs; its Learning graph already shows its children"])
+
+    def test_empty_and_untitled_bases(self):
+        self.small_vault()
+        self.write("Stubs/Untitled.base", "")
+        self.write("_-MOCs/Untitled 1.base", "views:\n  - type: table\n")
+        self.write("_-MOCs/Unused.base", " \n")
+        self.run_cli("graph", "Service Bus", "--write")
+        out, code = self.run_cli("check")
+        self.assertEqual(code, 0, out)
+        self.assertIn("6 notes, 0 errors, 3 warnings\n", out)
+        self.assertIn("  Stubs/Untitled.base: an empty Untitled Base: delete it\n", out)
+        self.assertIn("  _-MOCs/Untitled 1.base: an Untitled Base: name it for what it lists, or delete it\n", out)
+        self.assertIn("  _-MOCs/Unused.base: an empty Base: delete it\n", out)
+        self.assertNotIn("Children.base:", out)
 
     def mentions_vault(self, body):
         self.small_vault()

@@ -4,7 +4,9 @@
 Usage: palace.py [--vault PATH] COMMAND ...
 
   find QUERY [--kind K] [--body]      notes whose title, aliases or summary match QUERY
-  tree [MOC] [--depth N] [--summary]  the MOC chains, from the root MOCs down
+  tree [MOC] [--depth N] [--summary] [--mocs]
+                                      the MOC chains, from the root MOCs down; --mocs keeps
+                                      only the MOCs, the topics and the notes directly under a MOC
   related NOTE                        a note's chain, children, prerequisites and links
   backlinks NOTE                      every note that links to NOTE, and where
   graph TOPIC [--write]               a topic's learning graph, derived from builds_on
@@ -62,6 +64,9 @@ MAX_PARENTS = 2
 MAX_PREREQUISITES = 3
 MOC_DISSOLVE_AT = 2   # a MOC with this many children or fewer is dissolved
 MOC_SPLIT_AT = 30     # a hub with more children than this is split
+SUMMARY_WORDS = 25
+MAX_CONCEPTS = 3      # bold concept labels in a subtopic (writing rule 7)
+LEFT_OUT = (2, 4)     # topics under a subtopic's Left out on purpose (writing rule 11)
 SUBTOPIC_WORDS = (150, 450)
 GRAPH_COMMENT = ("%% Derived from the subtopics' and planned stubs' builds_on and the stubs' mocs by "
                  "palace.py graph. Regenerate; don't edit by hand. %%")
@@ -82,6 +87,13 @@ WIKI_SHOWN = re.compile(r"!?\[\[(?:[^\[\]|]*\|)?([^\[\]|]*)\]\]")  # [[target|sh
 BARE_URL = re.compile(r"https?://\S+")
 SOURCES = re.compile(r"^## Sources\b.*?(?=^#{1,2}[ \t]|\Z)", re.M | re.S)
 BAD_TITLE_CHARS = set('\\/:#^[]|')
+SHAPE_PARTS = (("**In short:**", re.compile(r"^\*\*In short(?::\*\*|\*\*:)", re.M)),  # writing rules 8, 10, 11
+               ("**Example:**", re.compile(r"^\*\*Example(?::\*\*|\*\*:)", re.M)),
+               ("## In an interview", re.compile(r"^## In an interview\b", re.M)),
+               ("## Left out on purpose", re.compile(r"^## Left out\b", re.M)))
+LEFT_OUT_LIST = re.compile(r"^## Left out\b.*?$(.*?)(?=^#{1,2}[ \t]|\Z)", re.M | re.S)
+BOLD = re.compile(r"\*\*([^*\n]+?)\*\*")
+GOAL = re.compile(r"^[ \t]*[-*][ \t]+\*\*Goal(?::\*\*|\*\*:)(.*)$", re.M)  # a topic's Scope line
 
 
 def die(message: str, code: int = 2) -> None:
@@ -516,7 +528,8 @@ class Vault:
     def learning_graph(self, topic: Note):
         """The topic's tree as (lines, warnings): each subtopic under its first prerequisite inside the topic."""
         rows, warnings = self.graph_rows(topic)
-        lines = ["  " * level + f"- [[{n.title}]]" + (" · stub" if n.kind == "stub" else "") for level, n, _ in rows]
+        lines = ["  " * level + f"- [[{n.title}]]" + (" · left out" if left else " · stub" if n.kind == "stub" else "")
+                 for level, n, left in rows]
         return lines, warnings
 
     def graph_rows(self, topic: Note):
@@ -659,27 +672,37 @@ def cmd_find(vault: Vault, args):
 def cmd_tree(vault: Vault, args):
     roots = [vault.get(args.moc)] if args.moc else vault.roots()
     shown = set()
+    above = set()  # with --mocs: the MOCs, the topics and every note on the chain above one
+    if args.mocs:
+        for n in vault.notes:
+            if n.kind in ("moc", "topic"):
+                above |= {id(n)} | {id(c) for c in vault.chain(n) if c is not None}
 
-    def walk(note, level):
-        if args.depth is not None and level > args.depth:
-            return
+    def walk(note, level, printed):
+        # A note past --depth, or one --mocs leaves out, is still walked but not printed, so
+        # it still counts as inside a chain.
         for child in sorted(vault.children(note), key=lambda n: (n.kind != "moc", n.title.lower())):
             primary = vault._first_parent(child)
-            line = "  " * level + "- " + label(child, args.summary)
+            visible = printed and (args.depth is None or level <= args.depth) \
+                and (not args.mocs or id(child) in above or note.kind == "moc")
+            line = "  " * level + "- " + label(child, args.summary or (args.mocs and child.kind in ("moc", "topic")))
             if primary is not note:
-                print(line + f"  (main place: {label(primary, False)})")
+                if visible:
+                    print(line + f"  (main place: {label(primary, False)})")
                 continue
             if id(child) in shown:
-                print(line + "  (cycle)")
+                if visible:
+                    print(line + "  (cycle)")
                 continue
             shown.add(id(child))
-            print(line)
-            walk(child, level + 1)
+            if visible:
+                print(line)
+            walk(child, level + 1, visible)
 
     for root in roots:
         shown.add(id(root))
-        print(label(root, args.summary))
-        walk(root, 1)
+        print(label(root, args.summary or (args.mocs and root.kind in ("moc", "topic"))))
+        walk(root, 1, True)
     if not args.moc:
         loose = [n for n in vault.notes if id(n) not in shown and n.kind != "root"]
         section("outside every chain", [f"{label(n, False)}  {n.rel}" for n in loose])
@@ -856,6 +879,9 @@ def check(vault: Vault):
         for key in REQUIRED[n.kind]:
             if key not in n.fm or (key not in ("builds_on", "mocs") and not n.values(key)):
                 err(n, f"missing {key}")
+        length = len(WIKI_SHOWN.sub(r"\1", n.summary).split())
+        if length > SUMMARY_WORDS:
+            warn(n, f"summary has {length} words; one sentence of at most {SUMMARY_WORDS}")
         for key in n.fm:
             if key not in KNOWN_PROPS:
                 warn(n, f"unknown property {key!r}")
@@ -913,6 +939,10 @@ def check(vault: Vault):
             rest = re.split(r"^## Sources\b", n.body, maxsplit=1, flags=re.M)[0]
             if rest.strip():
                 warn(n, "a stub has no body (only an optional ## Sources)")
+        if n.kind in ("topic", "subtopic") and any(
+                link.embed and PurePosixPath(link.name).name.lower() == "children.base" for link in n.body_links()):
+            listed = "its Learning graph" if n.kind == "topic" else "its Left out list"
+            warn(n, f"embeds Children.base, which only a MOC or a type: note needs; {listed} already shows its children")
         if n.kind == "moc":
             for line in n.body.split("\n"):
                 s = line.strip()
@@ -938,6 +968,24 @@ def check(vault: Vault):
             low, high = SUBTOPIC_WORDS
             if not low <= words <= high:
                 warn(n, f"{words} words across {len(group)} note(s); a subtopic is {low}–{high}")
+            body = mask(n.body)
+            # Writing rule 10 names the closing section after the goal's use when the goal isn't interviews.
+            goal = GOAL.search(parents[0].body) if parents and isinstance(parents[0], Note) else None
+            missing = [part for part, pattern in SHAPE_PARTS if not pattern.search(body)
+                       and not (part == "## In an interview" and goal and "interview" not in goal.group(1).lower())]
+            if missing:
+                warn(n, f"no {', '.join(missing)}; a subtopic opens with **In short:** and **Example:** "
+                        "and ends with ## In an interview and ## Left out on purpose")
+            left_out = LEFT_OUT_LIST.search(body)
+            if left_out:
+                count = len(re.findall(r"^[-*][ \t]+\S", left_out.group(1), re.M))
+                if not LEFT_OUT[0] <= count <= LEFT_OUT[1]:
+                    warn(n, f"{count} topic{'' if count == 1 else 's'} under Left out on purpose; "
+                            f"list {LEFT_OUT[0]}–{LEFT_OUT[1]}")
+            bold = [b for g in group for b in BOLD.findall(g.prose()) if b.strip(" :") not in ("In short", "Example")]
+            if len(bold) > MAX_CONCEPTS:
+                warn(n, f"{len(bold)} bold terms across {len(group)} note(s); a subtopic bolds only its new "
+                        f"concepts, at most {MAX_CONCEPTS}")
         if n.kind == "topic":
             lines, _ = vault.learning_graph(n)
             drawn = drawn_graph(n.text)
@@ -964,6 +1012,14 @@ def check(vault: Vault):
     for n in vault.notes:
         if not state.get(id(n)):
             visit(n, [n])
+
+    # Obsidian leaves an empty Untitled Base behind when a new one is abandoned
+    for rel in sorted(r for rels in vault.files.values() for r in rels if r.lower().endswith(".base")):
+        empty = not (vault.root / rel).read_text(encoding="utf-8", errors="replace").strip()
+        untitled = PurePosixPath(rel).stem.lower().startswith("untitled")
+        if empty or untitled:
+            warnings.append((rel, f"{'an empty' if empty else 'an'}{' Untitled' if untitled else ''} Base: "
+                                  + ("delete it" if empty else "name it for what it lists, or delete it")))
     return errors, warnings
 
 
@@ -1182,6 +1238,8 @@ def main(argv=None):
     p.add_argument("moc", nargs="?")
     p.add_argument("--depth", type=int)
     p.add_argument("--summary", action="store_true")
+    p.add_argument("--mocs", action="store_true",
+                   help="only the MOCs and topics, with their summaries, and the notes directly under a MOC")
     p.set_defaults(run=cmd_tree)
 
     p = sub.add_parser("related", help="a note's chain, children, prerequisites and links")
