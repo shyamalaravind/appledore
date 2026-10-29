@@ -30,14 +30,14 @@ Each run is a real session, so a full pass of 8 cases costs real usage: add `--m
 | `07-sources-dont-cover` | a question the sources don't cover gets "the agreed sources don't cover it", never an answer from memory |
 | `08-plan-asks-in-one-message` | a new topic's plan asks for sources, goal and placement in one message |
 
-Every case also checks that the session loaded the `study` skill. The graders check behaviour (the reply, the notes written, the tools used), not the skills' file layout, so they hold when skills move or are renamed. A tool check accepts the script under either name, `palace` or `appledore`.
+Every case also checks that the session loaded the `study` skill. The graders check behaviour (the reply, the notes written, the tools used), not the skill's file layout, so they hold when a step file moves or is renamed.
 
 ## The fixture vault
 
 `_fixture/` holds a small made-up vault on one topic, HTTP caching: two written subtopics, one ready stub, three waiting and four left out, plus the two pages that are its agreed sources. `_fixture/setup.sh` copies them into each run's empty workspace, so every case starts from the same vault.
 
 - **It never reaches your vault.** Each run has a temporary home folder, so the default vault path points into it, and the agent's shell can write only inside the run's folders.
-- **The vault's path reaches the agent through the shell.** The runner passes a session no variables except `EVAL_*` ones, so `setup.sh` exports `APPLEDORE_VAULT` and `PALACE_VAULT` from the temporary home's profile files, with opening notes in Obsidian turned off.
+- **The vault's path reaches the agent through the shell.** The runner passes a session no variables except `EVAL_*` ones, so `setup.sh` exports `APPLEDORE_VAULT` from the temporary home's profile files, with `APPLEDORE_OPEN=0` so no run opens Obsidian.
 - **The sources are local pages**, linked by absolute path from the topic note, so the agent reads them without network access. They sit beside the vault, never in it.
 - **Freshness sits at 448 words**, 2 under the limit, so case 05's filed answer always pushes it over.
 

@@ -21,7 +21,7 @@ Every repeat request for an unchanged response costs a round trip and work on th
 - **Out:** service workers, browser storage APIs, and HTTP/2 and HTTP/3 transport details.
 
 ## Learning graph
-%% Derived from the subtopics' and planned stubs' builds_on and the stubs' mocs by palace.py graph. Regenerate; don't edit by hand. %%
+%% Derived from the subtopics' and planned stubs' builds_on and the stubs' mocs by appledore.py graph. Regenerate; don't edit by hand. %%
 
 ## Sources
 - [HTTP caching field guide, part 1: caches and freshness](file://@@SOURCES@@/caching-basics.md)

@@ -28,19 +28,12 @@ EOF
 # because a run must never open Obsidian on the operator's desktop.
 cat > "$HOME/.appledore-eval-env" <<EOF
 export APPLEDORE_VAULT="$vault"
-export PALACE_VAULT="$vault"
 export APPLEDORE_OPEN=0
-export PALACE_OPEN=0
 EOF
 for profile in .zshenv .zshrc .bashrc .bash_profile .profile; do
     echo '. "$HOME/.appledore-eval-env"' >> "$HOME/$profile"
 done
 
 # Draw the topic's learning graph with the script under test, so the fixture matches whatever
-# drawing rules the script has now. Either path is fine: the script moves into the skill folder.
-for script in "$repo/skills/study/scripts/appledore.py" "$repo/scripts/palace.py"; do
-    if [ -f "$script" ]; then
-        python3 "$script" --vault "$vault" graph "HTTP caching" --write > /dev/null
-        break
-    fi
-done
+# drawing rules the script has now.
+python3 "$repo/skills/study/scripts/appledore.py" --vault "$vault" graph "HTTP caching" --write > /dev/null

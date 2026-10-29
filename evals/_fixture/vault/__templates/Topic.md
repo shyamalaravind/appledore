@@ -14,7 +14,7 @@ created: "{{date:YYYY-MM-DD}}"
 
 
 ## Learning graph
-%% Derived from the subtopics' and planned stubs' builds_on and the stubs' mocs by palace.py graph. Regenerate; don't edit by hand. %%
+%% Derived from the subtopics' and planned stubs' builds_on and the stubs' mocs by appledore.py graph. Regenerate; don't edit by hand. %%
 
 
 ## Sources

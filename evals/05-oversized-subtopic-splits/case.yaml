@@ -15,4 +15,4 @@ execution:
   allowed_tools: [Read, Glob, Grep, Skill, Bash, Write, Edit]
   append_system_prompt: >-
     The study vault for this session is the folder `vault` in the current working directory, and
-    the shell sets APPLEDORE_VAULT and PALACE_VAULT to it.
+    the shell sets APPLEDORE_VAULT to it.
