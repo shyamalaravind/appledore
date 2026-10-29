@@ -52,7 +52,7 @@ Lists stay lists even with one value, and links in properties are quoted: `- "[[
 `appledore check` checks these; Obsidian's own orphan and unresolved-link views cover the first two.
 
 1. Every note except `Home`, `README` and the root MOCs has `mocs`, and every chain ends at a root MOC.
-2. There are no unresolved links and no empty files, and every note has a `summary`.
+2. There are no unresolved links and no empty files, and every note has a `summary` of at most 25 words.
 3. Note names are unique, ignoring case, and no alias equals another note's title or alias.
 4. A MOC under a parent has more than two children, no hub has more than about 30, and a MOC holds no prose.
 5. A subtopic is 150–450 words across the notes it spans. `builds_on` targets exist and form no cycle, and each topic's drawn learning graph matches `appledore graph`.
@@ -60,3 +60,5 @@ Lists stay lists even with one value, and links in properties are quoted: `- "[[
 7. No note links its parent in its body or lists that parent in `builds_on`.
 8. No two problems share a `url`.
 9. Search, the graph, Bases and agents ignore `__templates/`.
+10. A subtopic opens with its In short and Example lines, ends with In an interview (or the section named after its goal's use) and a Left out on purpose list of 2–4, and bolds at most three terms, its new concepts.
+11. Only a MOC or a `type: note` embeds `Children.base`, because a topic's Learning graph and a subtopic's Left out list already list their children. No Base file is empty or Untitled.

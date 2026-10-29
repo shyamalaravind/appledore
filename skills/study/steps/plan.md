@@ -12,8 +12,9 @@ then writes one sitting at a time:
 ## 1. Look in the vault
 
 - `appledore find "<topic>"`, then its synonyms and key words, then the same with `--body`.
-- `appledore tree --summary` for the MOC chains, and `appledore related` on the two or three
-  likeliest parents.
+- `appledore tree --mocs` for the MOC chains: the MOCs and topics with their summaries, and the
+  notes directly under a MOC, which is all placement needs. Then `appledore related` on the two or
+  three likeliest parents.
 
 Note what the vault already has: notes on the topic or its parts, and where the topic could sit.
 
