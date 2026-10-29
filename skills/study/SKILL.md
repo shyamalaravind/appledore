@@ -43,14 +43,17 @@ Every step follows these. The other files cite them as "study rule N".
    of date or about another product, and the user can't tell which sentence it is. When the
    sources don't cover something you need:
    1. Tell the user plainly: "The agreed sources don't cover X."
-   2. Find 1–3 pages that do, official documentation first, and propose them, or ask the user
+   2. Find 1–3 pages that do, official sources first, and propose them, or ask the user
       for one.
    3. On the user's yes, read the page and add it to the topic note's Sources, so it is agreed
       from then on. If the user would rather not, leave X out: name it under Left out on purpose,
       or say that the question stays open.
 
    Every note ends with `## Sources`, linking the pages it was built from. Never save a page into
-   the vault, and never cite an AI chat.
+   the vault, and never cite an AI chat. **When a helper agent, or a fetch tool that answers a
+   prompt about a page, reads a source for you,** ask it to quote
+   word for word, with the URL each quote came from, and to write "not on this page" instead of
+   answering from memory, because a paraphrase can hide what came from memory.
 5. **After every write,** run `appledore check`, and fix every error before you go on. Never edit
    a Learning graph section by hand: `appledore` draws it from the notes' own `builds_on` and
    `mocs`, so it can't drift. A write command redraws the graphs it touches; when `check` says
@@ -89,11 +92,9 @@ Do this once per session, before anything else.
 1. **The script.** `appledore` means `python3 "${CLAUDE_SKILL_DIR}/scripts/appledore.py"`. If the
    path in that line still reads `${CLAUDE_SKILL_DIR}`, your host didn't fill it in: the script is
    `scripts/appledore.py` in this skill's folder. Write the command out in full in each shell
-   call. To run it several times in one call, define a shell function
-   (`appledore() { python3 "<path>" "$@"; }`), never a variable, because zsh doesn't split a
-   variable into words, so the call fails with "no such file or directory". `appledore --help`
-   lists the commands. It is the vault's only index: every call reads the notes themselves, so its
-   answers always match the vault, including the user's own edits.
+   call, or define a shell function to run it several times in one (Gotchas, below).
+   `appledore --help` lists the commands. It is the vault's only index: every call reads the
+   notes themselves, so its answers always match the vault, including the user's own edits.
 2. **The vault** is `~/work-space/Solenya/Mind palace`, or the folder in `APPLEDORE_VAULT` if that
    is set. `appledore` reads the same folder.
 3. **Read the vault's `README.md`.** It holds every convention a note follows: the folders, the
@@ -105,7 +106,9 @@ Do this once per session, before anything else.
 - **A topic was named:** run `appledore find '<topic>' --kind topic`.
   - **It exists:** read the topic note. Its Scope says the user's goal and starting point, and its
     Sources are the agreed sources. Run `appledore next '<topic>'`, tell the user in one line where
-    it stands (how many subtopics are written and how many are planned), then use `learn`.
+    it stands (how many subtopics are written and how many are planned), then route the rest of
+    the message by The loop (`learn` when it only asks to go on). The line goes first, because
+    `file` step 3 keeps its offer last.
   - **It doesn't:** use `plan`.
 - **No topic was named:** `appledore find '' --kind topic` lists the topics. Ask the user which one
   to continue, or what to start.
@@ -130,3 +133,20 @@ because a summary can drop the text of files you read.
 
 When a step finishes, wait for the user's next message and route it again. Anything that fits no
 row, answer it and stay in the loop.
+
+## Gotchas
+
+- **A variable holding the command fails in zsh** ("no such file or directory"), because zsh
+  doesn't split it into words. Define a function: `appledore() { python3 "<path>" "$@"; }`.
+- **A rename that changes only letter case** is invisible to a disk that ignores case, as a
+  Mac's does, and to the vault's git. Use `appledore mv`, which handles the disk; the commit in
+  `wrap-up` handles git.
+- **The Obsidian command line interface answers even when it is turned off** in Obsidian's
+  settings, so its answer doesn't say whether a note opened. Open notes only with
+  `appledore open`, which checks, and falls back to the `obsidian://` link.
+- **A paywalled page looks whole:** a saved or fetched copy can stop after its first section.
+  Check that it reaches the last section its contents list, which needs no full read. Read a page
+  marked "(needs your login)" in the user's browser if your host can, or ask the user to paste
+  the part you need.
+- **Agreed sources can disagree:** `writing-rules.md` rule 1 says which to follow and how to
+  name the disagreement.

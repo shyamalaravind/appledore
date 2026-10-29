@@ -22,27 +22,40 @@ Note what the vault already has: notes on the topic or its parts, and where the 
 
 Ask in one message, with your recommendation for each, so the user can reply "all fine":
 
-1. **Sources:** 2–5 pages, courses or books, with official documentation first. Include any the
-   user has named.
+1. **Sources:** 2–5 pages, courses or books, with official sources first: the standard or the
+   vendor's own documentation, listed ahead of explainers and tutorials. Include any the user has
+   named.
 2. **Goal and starting point:** what the topic is for (an interview, work, curiosity), which sets
-   how deep to go, and what the user already knows nearby, which sets what the notes may take for
-   granted.
+   how deep to go, and what the user already knows, which sets what the notes may take for
+   granted. Propose as known only what the vault's notes show (step 1), and ask about the rest,
+   because a guessed starting point skips what the user never learned.
 3. **Placement:** the topic note's parent, which is an existing MOC or note, or a new MOC with its
    own parent. Follow the README's MOC rules: a MOC needs five or more notes under it, and at most
    two MOC levels sit above a topic.
 
 ## 3. Propose the learning graph
 
-Read the sources' contents pages and overview pages first, so the graph follows how the material
-is built. Then propose:
+1. **Read the outlines,** the sources' contents pages and overview sections, not whole pages, so
+   the graph follows how the material is built. Say first what you're reading ("Reading the
+   outlines of 4 sources"), because a long read in silence looks stuck.
+2. **Check that each source's text is really there,** as `SKILL.md`'s Gotchas say, and tell the
+   user what a thin one can back.
+
+Then propose:
 
 - **The scope:** what's in and what's out, in 2–5 lines, set by the goal.
-- **The graph:** 4–10 subtopics as an indented tree, simplest first, each a part the agreed
-  sources cover. Mark a node the sources don't cover "not in the sources", so you and the user
-  can agree a source for it or cut it. Each line gives the title
-  (a canonical name, as the README says), a one-line summary, and what it builds on. A subtopic is
-  one sitting, a 2–3 minute read, within `writing-rules.md` rule 7. A node that needs more
-  becomes two nodes, and one too thin for a sitting merges into a neighbour.
+- **The graph:** 4–10 subtopics as an indented tree, simplest first. Each line gives the title
+  (a canonical name, as the README says), a one-line summary, and what it builds on.
+  - **One sitting each:** a 2–3 minute read, within `writing-rules.md` rule 7. A node that needs
+    more becomes two nodes, and one too thin for a sitting folds into its neighbour.
+  - **The goal decides what gets a node, then the sources:** a part the goal needs only in
+    passing folds into the neighbour it serves, as a bullet or two named in that neighbour's stub
+    `summary`, because a sitting of its own spends the user's time on it. A part the goal needs
+    but the sources cover only briefly gets a shallow node of its own when what they cover fills
+    a sitting, and its deeper parts become stubs under it now, for a deep dive. Don't fetch pages to deepen it, because the user
+    decides what goes deeper.
+  - **From the agreed sources only:** mark a node they don't cover "not in the sources", so you
+    and the user can agree a source for it or cut it.
 - **Known nodes:** notes already in the vault that a subtopic builds on. They go into `builds_on`
   as they are.
 - **Take-overs:** a note whose concept *is* a planned subtopic. It becomes that subtopic instead of
@@ -63,10 +76,14 @@ values as study rule 6 says:
    - **Overview:** at most 100 words from the sources, written to `writing-rules.md`: one line on
      the problem, then 2–4 bullets.
    - **Scope:** `Goal:`, `Starting from:`, `In:` and `Out:`, one line each.
+   - **Sources:** the `source` lines, each a link with its title, followed by "(needs your
+     login)" for a page behind a login.
 3. **One stub per planned subtopic,** prerequisites first, since `new` refuses a link to a missing
    note: `appledore new stub '<title>'`, with a `summary` saying what it will teach, `mocs` the
    topic, and a `builds_on` for each prerequisite (a planned stub or a known note). The
-   `builds_on` is what lets `appledore next` tell which subtopic is ready.
+   `builds_on` is what lets `appledore next` tell which subtopic is ready. A shallow node's deeper
+   parts get stubs too, at most four, each with `mocs` that node's stub and no `builds_on`, so the
+   graph draws them as left out under it.
 4. **Each take-over** now: `appledore promote '<note>' subtopic`, with `mocs` the topic and its
    planned `builds_on`, then `learn`'s steps 2–4, starting from the note's own content and the
    sources.
@@ -75,7 +92,7 @@ values as study rule 6 says:
 ## 5. Hand back
 
 Give the user the topic note's link and the graph as `appledore graph '<topic>'` prints it, then
-use `learn` for the first ready subtopic.
+use `learn` for the subtopic `appledore next '<topic>'` recommends.
 
 ## Deep dive
 

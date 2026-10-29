@@ -152,7 +152,7 @@ Any agent that can read files and run Python can follow [AGENTS.md](AGENTS.md): 
 ### Requirements
 
 - **Python 3.8+,** standard library only.
-- **An Obsidian vault in git,** because wrap-up commits and pushes it, with the core Bases plugin on.
+- **An Obsidian vault that is its own git repository,** with the core Bases plugin on. Wrap-up commits and pushes it, and a vault inside a larger repository would carry that repository's other work along, so `appledore` refuses one.
 - **The vault's path** in `APPLEDORE_VAULT`. `PALACE_VAULT`, its old name, still works until the next version.
 - **The vault's layout.** Today appledore expects the layout in [docs/vault-conventions.md](docs/vault-conventions.md): its folders, properties, templates and invariants, with a copy of that file as the vault's `README.md`. A setup command for a fresh vault is on the roadmap. Until then, `appledore convert` moves legacy inline fields into YAML frontmatter.
 
@@ -167,9 +167,12 @@ There is no index file to fall out of date. Every command reads the notes themse
 | `related <note>` | a note's chain, children, prerequisites and links |
 | `backlinks <note>` | every note that links to it |
 | `graph <topic> [--write]` | the topic's learning graph, drawn from `builds_on` |
-| `next <topic> [--left-out]` | the planned subtopics that are ready, the ones waiting, and the stubs left out; `--left-out` lists only those, grouped by the note that left each out |
+| `next <topic> [--left-out]` | the recommended subtopic (the shallowest ready one, ties in the graph's order), the planned subtopics that are ready, the ones waiting, and the stubs left out; `--left-out` lists only those, grouped by the note that left each out |
 | `open <note>` | open a note in Obsidian and print its `obsidian://` link; `APPLEDORE_OPEN=0` only prints the link |
 | `check` | the vault's invariants and each subtopic's shape, run after every write; an error exits 1, a warning doesn't. It only reads |
+| `review [<note> ...]` | the wrap-up review of the notes changed since the vault's last commit, or of the notes named: errors, warnings on their chains, notes that gained children, likely duplicates, notes outside every chain, and topics with nothing planned |
+| `commit -F -` | commit the vault with the message read from standard input, list every file it took, and push it once; it refuses during a merge or rebase, on a detached HEAD and while `check` finds errors, and reports a failed push without retrying it |
+| `brief <subtopic>` | the cold reader's brief: the text of `cold-read.md`, the reader, and the subtopic's notes with line numbers |
 | `mv <note> <new>` | rename or move a note, rewriting every link to it |
 | `new <kind> <title> key=value …` | create a topic, subtopic, note, stub, MOC or child (a part split off another note) from the vault's own template, with its properties filled in; it refuses a name that is already a title or an alias |
 | `promote <note> <kind> [key=value …]` | turn a stub or a note into a topic, subtopic or note, setting any properties given: a stub moves to `_Main Notes/`, and one with no text yet gets that template's parts |
@@ -195,9 +198,8 @@ The write commands (`mv`, `new`, `promote`, `set` and `merge`) take `--dry-run`,
 **v0.1.0, in daily use.**
 
 **Next:**
-1. **Planning fixes:** weigh each node against your goal, and read the sources' outlines before whole pages.
-2. **Any vault:** a setup command, with the folder names and the vault path made configurable.
-3. **More agents:** native packages for Codex, Cursor and Gemini CLI.
+1. **Any vault:** a setup command, with the folder names and the vault path made configurable.
+2. **More agents:** native packages for Codex, Cursor and Gemini CLI.
 
 ## References
 

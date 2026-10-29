@@ -9,9 +9,12 @@ at once, and only on top of what they already hold.
 Run `appledore next '<topic>'`.
 
 - **The user said "next":**
-  - One subtopic is ready: write it, and say so in one line ("Writing [[X]], which builds on
-    [[Y]].").
-  - Several are ready: list them, at most 5, with the one you recommend first, and ask.
+  - A node is ready: write the one it prints as `recommended:`, the shallowest ready one, and
+    say so in one line that names the others ready ("Writing [[X]], which builds on [[Y]]; also
+    ready: [[Z]]."). Don't ask when several are ready, because "next" already says to go on, and
+    one word from the user redirects it.
+  - Planned, but none ready: give the `waiting:` lines, and ask whether to write the missing
+    prerequisite first or change the `builds_on`.
   - None is planned: say the graph is written, give the topic's stubs to explore as
     `appledore next '<topic>' --left-out` prints them, and offer a deep dive on one, or `wrap-up`.
 - **The user named a node:**
@@ -44,10 +47,12 @@ already a subtopic: rewrite it in place, and step 4's `promote` then only update
   in one note or in a note with child notes, and rule 14 says when a part gets a child note. A
   child is `appledore new child '<child>'`, with its `summary` and `mocs` the main note. Never
   make a subtopic a MOC: a node that needs a map of its own is a topic.
-- **Left out on purpose:** 2–4 topics the sources raise here that this subtopic skips. Run
-  `appledore find` on each. One that has a note gets a link. One that doesn't becomes a stub:
-  `appledore new stub '<title>'`, with a one-sentence `summary`, `mocs` this subtopic, and a
-  `source` for the page that covers it. The user expands them later with a deep dive.
+- **Left out on purpose:** 2–4 topics the sources raise here that this subtopic skips. Start
+  with the stubs already under it, the children `appledore related` lists, then add others up to
+  four. Run `appledore find` on each new one. One that has a note gets a link. One that doesn't
+  becomes a stub: `appledore new stub '<title>'`, with a one-sentence `summary`, `mocs` this
+  subtopic, and a `source` for the page that covers it. The user expands them later with a deep
+  dive.
 
 ## 4. File it
 
@@ -66,17 +71,12 @@ and its fixes roughly double the time a note takes, and the writing rules alone 
 quality. Skip it if your host can't start a helper agent with no tools. In Claude Code, it is the
 plugin's `cold-reader` agent.
 
-1. **The brief:** the text of `cold-read.md` in this skill's folder, then the reader, then the
-   note.
-   - **The reader:** the topic note's `Starting from:` line, plus the title and `summary` of each
-     note in `builds_on`. That is all the cold reader may assume.
-   - **The note:** its text with line numbers, frontmatter included, because the body doesn't
-     repeat the `summary`. For a subtopic with children, each note's title, then its numbered text.
-
-   Never give it the writing rules: it tests what the text gives a newcomer, not whether the text
-   follows rules.
-2. **Start a fresh helper** with the brief as its prompt. It sees nothing else, which is what
-   makes the read cold.
+1. **The brief:** run `appledore brief '<title>'`. It prints the text of `cold-read.md`, the reader
+   (the topic's `Starting from:` line, and the title and `summary` of each note in `builds_on`)
+   and the note's text with line numbers. Add nothing to it, not even the writing rules: the read
+   tests what the text gives a newcomer, not whether the text follows rules.
+2. **Start a fresh helper** with that output, word for word, as its prompt. It sees nothing else,
+   which is what makes the read cold.
 3. **Fix** what it reports where the text is at fault: a term used before it's defined, a concept
    whose reason to exist it couldn't find, a rule without its reason, a bare fact, too much new at
    once, a part it couldn't paraphrase, a place it read twice. Find the writing rule each finding
@@ -95,6 +95,8 @@ Open it with `appledore open '<title>'` (its main note, if it spans notes), then
 
 - the note's `obsidian://` link (several, if it spans notes);
 - the new concepts it teaches, in one line;
+- the node "next" writes, as `appledore next '<topic>'` now prints it after `recommended:`, if
+  it prints one;
 - the stubs it left out, as links. If `appledore next '<topic>'` now shows nothing planned, give
   the topic's whole list instead, as `appledore next '<topic>' --left-out` prints it, and how to
   pick one: "deep dive <stub>";

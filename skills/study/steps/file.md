@@ -27,7 +27,8 @@ Otherwise, pick the place as `writing-rules.md` rule 14 says, and end the answer
 user can answer in a word, even when it names several places, because a list to work through
 after every answer slows the loop: "File this into [[Note]], under `## Section`? yes / no /
 elsewhere". Name each place: a note and its section, a child note, or a new subtopic after the
-note being read.
+note being read. Put nothing after the offer, no pointer to the next node and no status, so it is
+the reply's last line and a one-word reply answers it.
 
 On "elsewhere", ask where, or list the other places as numbered items. On "no", file nothing.
 
