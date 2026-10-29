@@ -171,7 +171,7 @@ There is no index file to fall out of date. Every command reads the notes themse
 | `open <note>` | open a note in Obsidian and print its `obsidian://` link; `APPLEDORE_OPEN=0` only prints the link |
 | `check` | the vault's invariants and each subtopic's shape, run after every write; an error exits 1, a warning doesn't |
 | `review [<note> ...]` | the wrap-up review of the notes changed since the vault's last commit, or of the notes named: errors, warnings on their chains, notes that gained children, likely duplicates, notes outside every chain, and topics with nothing planned |
-| `commit "<message>"` | commit the vault and push it once; it refuses during a merge or rebase, on a detached HEAD and while `check` finds errors, and reports a failed push without retrying it |
+| `commit -F -` | commit the vault with the message read from standard input, list every file it took, and push it once; it refuses during a merge or rebase, on a detached HEAD and while `check` finds errors, and reports a failed push without retrying it |
 | `brief <subtopic>` | the cold reader's brief: the text of `cold-read.md`, the reader, and the subtopic's notes with line numbers |
 | `mv <note> <new>` | rename or move a note, rewriting every link to it |
 | `convert` | legacy inline fields to YAML frontmatter |

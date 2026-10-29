@@ -712,7 +712,9 @@ class GitVaultTest(VaultTest):
         self.git("push", "-q", "-u", "origin", "main")
 
     def git(self, *args, cwd=None, ok=True):
-        done = subprocess.run(["git", *args], cwd=cwd or self.root, capture_output=True, encoding="utf-8")
+        # Without the variables that locate a repository, as when the tests run from a git hook.
+        env = {k: v for k, v in appledore.os.environ.items() if k not in appledore.GIT_LOCATION_VARS}
+        done = subprocess.run(["git", *args], cwd=cwd or self.root, capture_output=True, encoding="utf-8", env=env)
         if ok:
             self.assertEqual(done.returncode, 0, done.stderr)
         return done.stdout
@@ -862,24 +864,72 @@ class CommitTests(GitVaultTest):
     def last(self, where=None):
         return self.git("log", "-1", "--format=%s", "main", cwd=where).strip()
 
-    def test_commits_and_pushes(self):
+    def test_commits_and_pushes_listing_every_file(self):
+        self.write("_attachments/old.svg", "<svg/>\n")
+        self.commit("Old")
+        (self.root / "_attachments/old.svg").unlink()
         self.write("Stubs/Ordering.md", note("How are messages kept in order?", ["Queue"]))
+        self.write(".obsidian/app.json", "{}\n")  # not a note, but add -A takes it too
         out, err, code = self.run_both("commit", "Study Service Bus: ordering")
-        self.assertEqual((out, err, code), ("committed 1 file: Study Service Bus: ordering\n"
-                                            "pushed 1 commit to origin/main\n", "", 0))
+        self.assertEqual((out, err, code), ("committed 3 files: Study Service Bus: ordering\n"
+                                            "  A  .obsidian/app.json\n"
+                                            "  A  Stubs/Ordering.md\n"
+                                            "  D  _attachments/old.svg\n"
+                                            "pushed 2 commits to origin/main\n", "", 0))
         self.assertEqual(self.last(self.remote), "Study Service Bus: ordering")
         out, _, _ = self.run_both("commit", "Again")
         self.assertEqual(out, "nothing to commit\nnothing to push: origin/main has every commit\n")
+
+    def test_the_message_from_standard_input(self):
+        # In double quotes the shell would run the backtick span and expand $HOME; read from
+        # standard input, the message reaches git untouched.
+        message = "Study Service Bus: `git checkout -- .` and $HOME\n\nOrdering.\n"
+        self.write("Stubs/Ordering.md", note("How are messages kept in order?", ["Queue"]))
+        with mock.patch.object(appledore.sys, "stdin", io.StringIO(" \n")):
+            _, err, code = self.run_both("commit", "-F", "-")
+        self.assertEqual(code, 2)
+        self.assertIn("the commit message is empty", err)
+        self.assertEqual(self.git("diff", "--cached", "--name-only"), "")
+        with mock.patch.object(appledore.sys, "stdin", io.StringIO(message)):
+            out, _, code = self.run_both("commit", "-F", "-")
+        self.assertEqual(code, 0, out)
+        self.assertTrue(out.startswith("committed 1 file: Study Service Bus: `git checkout -- .` and $HOME\n"), out)
+        self.assertEqual(self.git("log", "-1", "--format=%B", "main", cwd=self.remote).strip(), message.strip())
+
+    def test_a_quoted_heredoc_as_wrap_up_runs_it(self):
+        ran = Path(self.tmp.name) / "ran"
+        self.write("Stubs/Ordering.md", note("How are messages kept in order?", ["Queue"]))
+        script = (f'"{sys.executable}" "{appledore.__file__}" --vault "{self.root}" commit -F - <<\'EOF\'\n'
+                  f"Study `touch {ran}` and $HOME\nEOF\n")
+        done = subprocess.run(["sh", "-c", script], capture_output=True, encoding="utf-8")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertFalse(ran.exists())
+        self.assertEqual(self.last(self.remote), f"Study `touch {ran}` and $HOME")
+
+    def test_git_variables_from_the_environment_are_ignored(self):
+        # A git hook or a shell may export them; they must not send the commit to another repository.
+        elsewhere = Path(self.tmp.name) / "elsewhere"
+        self.git("init", "-q", str(elsewhere), cwd=self.tmp.name)
+        self.git("-c", "user.name=T", "-c", "user.email=t@example.com", "commit", "-q", "--allow-empty",
+                 "-m", "Theirs", cwd=elsewhere)
+        self.write("Stubs/Ordering.md", note("How are messages kept in order?", ["Queue"]))
+        with mock.patch.dict(appledore.os.environ, {"GIT_DIR": str(elsewhere / ".git"), "GIT_WORK_TREE": str(elsewhere),
+                                                    "GIT_INDEX_FILE": str(elsewhere / ".git" / "index")}):
+            out, err, code = self.run_both("commit", "Study")
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.last(self.remote), "Study")
+        self.assertEqual(self.git("log", "--format=%s", cwd=elsewhere), "Theirs\n")
+        self.assertEqual(self.git("status", "--short", cwd=elsewhere), "")
 
     def test_a_case_only_rename(self):
         self.run_cli("mv", "Peek-lock", "peek-lock")
         out, _, code = self.run_both("commit", "Rename")
         self.assertEqual(code, 0, out)
+        # Without git rm --cached, a repository that ignores case would list no rename here.
+        self.assertIn("  R  _Main Notes/Peek-lock.md → _Main Notes/peek-lock.md\n", out)
         tree = self.git("ls-tree", "-r", "--name-only", "main", cwd=self.remote)
         self.assertIn("_Main Notes/peek-lock.md\n", tree)
         self.assertNotIn("Peek-lock.md", tree)
-        if self.git("config", "--bool", "core.ignorecase").strip() == "true":  # macOS and Windows
-            self.assertIn("renamed by letter case only:\n  - _Main Notes/Peek-lock.md\n", out)
 
     def test_a_failed_push_is_reported_once_and_the_commit_kept(self):
         self.push_elsewhere()
@@ -893,7 +943,7 @@ class CommitTests(GitVaultTest):
         with mock.patch.object(appledore.subprocess, "run", side_effect=run):
             out, err, code = self.run_both("commit", "Study Service Bus: ordering")
         self.assertEqual(code, 1)
-        self.assertEqual(out, "committed 1 file: Study Service Bus: ordering\n")
+        self.assertEqual(out, "committed 1 file: Study Service Bus: ordering\n  A  Stubs/Ordering.md\n")
         self.assertIn("the push to origin/main failed and was not retried; 1 commit(s) wait in the vault", err)
         self.assertEqual(pushes, ["push"])
         self.assertEqual(self.last(), "Study Service Bus: ordering")
@@ -911,13 +961,14 @@ class CommitTests(GitVaultTest):
         self.git("remote", "remove", "origin")
         self.write("Stubs/Ordering.md", note("How are messages kept in order?", ["Queue"]))
         out, _, code = self.run_both("commit", "Local")
-        self.assertEqual((out, code), ("committed 1 file: Local\nnot pushed: the vault has no remote\n", 0))
+        self.assertEqual((out, code), ("committed 1 file: Local\n  A  Stubs/Ordering.md\n"
+                                       "not pushed: the vault has no remote\n", 0))
 
     def test_a_branch_with_no_upstream(self):
         self.git("branch", "--unset-upstream")
         self.write("Stubs/Ordering.md", note("How are messages kept in order?", ["Queue"]))
         out, err, code = self.run_both("commit", "Local")
-        self.assertEqual((out, code), ("committed 1 file: Local\n", 1))
+        self.assertEqual((out, code), ("committed 1 file: Local\n  A  Stubs/Ordering.md\n", 1))
         self.assertIn("not pushed: the branch has no upstream; the user can set one with git push -u origin HEAD", err)
 
     def test_refuses_mid_merge_and_review_says_why_first(self):

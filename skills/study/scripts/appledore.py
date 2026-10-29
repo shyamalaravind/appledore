@@ -17,8 +17,9 @@ Usage: appledore.py [--vault PATH] COMMAND ...
   open NOTE                           open a note in Obsidian, and print its obsidian:// link
   review [NOTE ...]                   the wrap-up review of the notes changed since the vault's last
                                       commit, or of the notes named
-  commit MESSAGE                      commit the vault, case-only renames included, and push it once;
-                                      refuses mid-merge, on a detached HEAD or with check errors
+  commit -F - | MESSAGE               commit the vault, case-only renames included, and push it once;
+                                      refuses mid-merge, on a detached HEAD or with check errors;
+                                      -F - reads the message from standard input
   brief SUBTOPIC                      the cold reader's brief: cold-read.md, the reader and the
                                       subtopic's notes, numbered
 
@@ -1288,16 +1289,24 @@ COLD_READ = Path(__file__).resolve().parent.parent / "cold-read.md"
 IN_PROGRESS = (("MERGE_HEAD", "a merge"), ("CHERRY_PICK_HEAD", "a cherry-pick"), ("REVERT_HEAD", "a revert"),
                ("rebase-merge", "a rebase"), ("rebase-apply", "a rebase"))
 SETTLE = "the user must settle these in git before a commit"
+# The variables that tell git where a repository is: the names git rev-parse --local-env-vars prints,
+# and GIT_NAMESPACE. Inherited from a git hook or a shell, they would override git -C and send a
+# commit and a push to another repository.
+GIT_LOCATION_VARS = {"GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT",
+                     "GIT_OBJECT_DIRECTORY", "GIT_DIR", "GIT_WORK_TREE", "GIT_IMPLICIT_WORK_TREE", "GIT_GRAFT_FILE",
+                     "GIT_INDEX_FILE", "GIT_NO_REPLACE_OBJECTS", "GIT_REPLACE_REF_BASE", "GIT_PREFIX",
+                     "GIT_SHALLOW_FILE", "GIT_COMMON_DIR", "GIT_NAMESPACE"}
 
 
 def git(vault: Vault, *args, timeout=60):
-    """Run git in the vault with no terminal, so neither git nor ssh can wait for a password, a
-    passphrase or a host key answer: (exit code, stdout, stderr). The exit code is None when git
-    can't start or hangs."""
+    """Run git in the vault's own repository, whatever the environment points at, and with no
+    terminal, so neither git nor ssh can wait for a password, a passphrase or a host key answer:
+    (exit code, stdout, stderr). The exit code is None when git can't start or hangs."""
+    env = {k: v for k, v in os.environ.items() if k not in GIT_LOCATION_VARS}
+    env["GIT_TERMINAL_PROMPT"] = "0"
     try:
         done = subprocess.run(["git", "-C", str(vault.root), *args], stdin=subprocess.DEVNULL, capture_output=True,
-                              encoding="utf-8", errors="replace", timeout=timeout, start_new_session=True,
-                              env=dict(os.environ, GIT_TERMINAL_PROMPT="0"))
+                              encoding="utf-8", errors="replace", timeout=timeout, start_new_session=True, env=env)
     except (OSError, subprocess.SubprocessError) as e:
         return None, "", str(e)
     return done.returncode, done.stdout, done.stderr.strip()
@@ -1319,6 +1328,14 @@ def own_repository(vault: Vault, instead: str = ""):
     if prefix.strip():
         die(f"the vault is the folder {prefix.strip().rstrip('/')!r} inside a larger git repository, and "
             f"appledore reviews and commits only a vault that is its own repository{instead}")
+    code, top, err = git(vault, "rev-parse", "--show-toplevel")
+    try:
+        same = code == 0 and os.path.samefile(top.strip(), vault.root)
+    except OSError:
+        same = False
+    if not same:
+        die(f"git's top folder is {top.strip() or err!r}, not the vault, and appledore reviews and commits "
+            f"only a vault that is its own repository{instead}")
 
 
 def repository_problems(vault: Vault) -> list:
@@ -1496,7 +1513,26 @@ def case_renames(vault: Vault) -> list:
     return found
 
 
+def commit_message(args) -> str:
+    """The message: MESSAGE, or the text of the file -F names, standard input for -. Standard input,
+    fed by a quoted heredoc, is the safe way, because in double quotes the shell runs a backtick span
+    and expands a $."""
+    if args.file is None:
+        text = args.message
+    elif args.file == "-":
+        text = sys.stdin.read()
+    else:
+        try:
+            text = Path(args.file).read_text(encoding="utf-8")
+        except OSError as e:
+            die(f"can't read the message: {e}")
+    if not text.strip():
+        die("the commit message is empty")
+    return text.strip()
+
+
 def cmd_commit(vault: Vault, args):
+    message = commit_message(args)
     own_repository(vault)
     problems = repository_problems(vault)
     if problems:
@@ -1511,13 +1547,20 @@ def cmd_commit(vault: Vault, args):
     for rel in renamed:
         git_or_die(vault, "rm", "--cached", "-q", "--", rel)
     git_or_die(vault, "add", "-A")
-    staged = [p for p in git_or_die(vault, "diff", "--cached", "--name-only", "-z").split("\0") if p]
+    # Every file staged, with git's status letter, since add -A takes settings, attachments and
+    # deletions too, and the user should see each one.
+    fields, staged, i = git_or_die(vault, "diff", "--cached", "--name-status", "-z").split("\0"), [], 0
+    while i < len(fields) - 1:
+        paths = 2 if fields[i][:1] in ("R", "C") else 1  # a rename or copy names the old path, then the new
+        staged.append(f"{fields[i][:1]}  " + " → ".join(fields[i + 1:i + 1 + paths]))
+        i += 1 + paths
     if staged:
-        code, _, err = git(vault, "commit", "-q", "-m", args.message)
+        code, _, err = git(vault, "commit", "-q", "-m", message)
         if code != 0:
             die(f"the commit failed, so nothing was pushed: {err}", 1)
-        print(f"committed {len(staged)} file{'' if len(staged) == 1 else 's'}: {args.message}")
-        section("renamed by letter case only", renamed)
+        print(f"committed {len(staged)} file{'' if len(staged) == 1 else 's'}: {message.splitlines()[0]}")
+        for line in staged:
+            print(f"  {line}")
     else:
         print("nothing to commit")
 
@@ -1640,7 +1683,9 @@ def main(argv=None):
     p.set_defaults(run=cmd_review)
 
     p = sub.add_parser("commit", help="commit the vault, case-only renames included, and push it once")
-    p.add_argument("message")
+    message = p.add_mutually_exclusive_group(required=True)
+    message.add_argument("message", nargs="?", help="the message; -F - is safer, because the shell can't touch it")
+    message.add_argument("-F", dest="file", metavar="FILE", help="read the message from FILE, or from standard input for -")
     p.set_defaults(run=cmd_commit)
 
     p = sub.add_parser("brief", help="the cold reader's brief for a subtopic")
