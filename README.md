@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-d97757.svg)](#install)
 [![Agent-agnostic](https://img.shields.io/badge/agents-any%20that%20reads%20AGENTS.md-555.svg)](AGENTS.md)
-[![Python 3.8+, no dependencies](https://img.shields.io/badge/python-3.8%2B%2C%20stdlib%20only-3776ab.svg)](scripts/palace.py)
+[![Python 3.8+, no dependencies](https://img.shields.io/badge/python-3.8%2B%2C%20stdlib%20only-3776ab.svg)](skills/study/scripts/appledore.py)
 [![Obsidian](https://img.shields.io/badge/Obsidian-vault-7c3aed.svg)](https://obsidian.md)
 
 > In *Sherlock*'s "His Last Vow", everyone hunts for the vaults under Appledore, Charles Augustus Magnussen's house. There are no vaults: it was all in his mind palace. This project runs the other way. Your mind palace becomes a vault.
@@ -35,7 +35,7 @@ flowchart LR
     F --> U
     U -- "any other question" --> A["answered directly,<br/>nothing filed"]
     A --> U
-    U -- "deep dive X" --> D["deep-dive<br/>X grows subtopics"]
+    U -- "deep dive X" --> D["plan: deep dive<br/>X grows subtopics"]
     D --> L
     U -- "wrap up" --> W["wrap-up<br/>review the MOCs,<br/>commit the vault"]
 ```
@@ -48,7 +48,7 @@ Start it with `/appledore:study <topic>`, then talk to it:
 | `next` | **learn:** it writes the next subtopic whose prerequisites are done, opens it in Obsidian and gives you its `obsidian://` link. After the last one, it lists every stub the topic left out, for your next deep dive. |
 | a question about the subject | **file:** it answers from the agreed sources, then offers in one line to file the answer: inside one or more existing notes, or as a new subtopic. When the vault already answers it, you get that note's link instead. `just answer` turns the offer off. |
 | a question about the session, the plan, the vault or appledore | It answers directly, and files nothing. |
-| `deep dive <node>` | **deep-dive:** that node, or a topic a note left out, grows its own subtopics in the graph. |
+| `deep dive <node>` | **plan, deep dive:** that node, or a topic a note left out, grows its own subtopics in the graph. |
 | `cold read it` | A fresh helper with no context reads the note as a newcomer would and reports every undefined term and missing "because". |
 | `wrap up` | **wrap-up:** it reviews the MOC chains the session touched (too big, too small, duplicates, orphans), proposes each change for your yes, then commits and pushes the vault. |
 
@@ -121,7 +121,7 @@ Each choice above is a bet on what helps a reader learn from text. A review of a
 
 - **[Karpathy's LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f):**
   - Taken: a conventions file that both you and the model read, automatic checks, and answers filed back into the knowledge base.
-  - Not taken: in appledore you read every note, and there is no hand-kept index, because `palace.py` computes it.
+  - Not taken: in appledore you read every note, and there is no hand-kept index, because the `appledore` script computes it.
 - **[Zettelkasten](https://zettelkasten.de/atomicity/guide/):** atomic notes, and structure that appears as content grows ([hubs](https://zettelkasten.de/posts/zettelkasten-hubs/)).
 - **[Maps of Content](https://notes.linkingyourthinking.com/Cards/MOCs+Overview)** (Nick Milo): create a MOC at the [mental squeeze point](https://notes.linkingyourthinking.com/Cards/Mental+Squeeze+Point), never ahead of the notes.
 - **[Evergreen notes](https://notes.andymatuschak.org/zNUaiGAXp21eorsER1Jm9yU)** (Andy Matuschak): [concept-oriented](https://notes.andymatuschak.org/z2hQEhqWkdRLL9JUwfawZZx) titles, and [links over tags](https://notes.andymatuschak.org/Prefer_associative_ontologies_to_hierarchical_taxonomies).
@@ -147,18 +147,18 @@ To work on appledore itself, add your clone instead (`claude plugin marketplace 
 
 ### Other agents
 
-Any agent that can read files and run Python can follow [AGENTS.md](AGENTS.md): the six skills are plain [Agent Skills](https://agentskills.io/specification), and every instruction says "ask the user" rather than naming one host's tool. Native packages for Codex, Cursor and Gemini CLI are on the roadmap.
+Any agent that can read files and run Python can follow [AGENTS.md](AGENTS.md): `study` is a plain [Agent Skill](https://agentskills.io/specification), with its steps, writing rules and script all in its own folder, and every instruction says "ask the user" rather than naming one host's tool. Native packages for Codex, Cursor and Gemini CLI are on the roadmap.
 
 ### Requirements
 
 - **Python 3.8+,** standard library only.
 - **An Obsidian vault in git,** because wrap-up commits and pushes it, with the core Bases plugin on.
-- **The vault's path** in `PALACE_VAULT`.
-- **The vault's layout.** Today appledore expects the layout in [docs/vault-conventions.md](docs/vault-conventions.md): its folders, properties, templates and invariants, with a copy of that file as the vault's `README.md`. A setup command for a fresh vault is on the roadmap. Until then, `palace.py convert` moves legacy inline fields into YAML frontmatter.
+- **The vault's path** in `APPLEDORE_VAULT`. `PALACE_VAULT`, its old name, still works until the next version.
+- **The vault's layout.** Today appledore expects the layout in [docs/vault-conventions.md](docs/vault-conventions.md): its folders, properties, templates and invariants, with a copy of that file as the vault's `README.md`. A setup command for a fresh vault is on the roadmap. Until then, `appledore convert` moves legacy inline fields into YAML frontmatter.
 
-## `palace.py`: the index that can't drift
+## `appledore`: the index that can't drift
 
-There is no index file to fall out of date. Every command reads the notes themselves, so the answers always match the vault, including edits you made by hand in Obsidian.
+There is no index file to fall out of date. Every command reads the notes themselves, so the answers always match the vault, including edits you made by hand in Obsidian. The script is `skills/study/scripts/appledore.py`, and `appledore --help` lists its commands.
 
 | Command | What it does |
 |---|---|
@@ -168,7 +168,7 @@ There is no index file to fall out of date. Every command reads the notes themse
 | `backlinks <note>` | every note that links to it |
 | `graph <topic> [--write]` | the topic's learning graph, drawn from `builds_on` |
 | `next <topic> [--left-out]` | the planned subtopics that are ready, the ones waiting, and the stubs left out; `--left-out` lists only those, grouped by the note that left each out |
-| `open <note>` | open a note in Obsidian, through its command line interface when that's turned on and the `obsidian://` link otherwise, and print the link; `PALACE_OPEN=0` only prints it |
+| `open <note>` | open a note in Obsidian and print its `obsidian://` link; `APPLEDORE_OPEN=0` only prints the link |
 | `check` | the vault's invariants, run after every write |
 | `mv <note> <new>` | rename or move a note, rewriting every link to it |
 | `convert` | legacy inline fields to YAML frontmatter |
@@ -177,8 +177,8 @@ There is no index file to fall out of date. Every command reads the notes themse
 
 | Path | What it is |
 |---|---|
-| [`skills/`](skills) | `study` (the loop and its rules) and its five steps: `plan`, `learn`, `file`, `deep-dive`, `wrap-up`. `study/writing-rules.md` holds the 15 writing rules. |
-| [`scripts/palace.py`](scripts/palace.py) | The vault's index and checks. |
+| [`skills/study/`](skills/study) | The one skill. `SKILL.md` is the loop and its rules, `steps/` holds its four steps (`plan`, which also runs deep dives, `learn`, `file` and `wrap-up`), `writing-rules.md` the 15 writing rules, and `cold-read.md` the cold reader's brief. |
+| [`skills/study/scripts/appledore.py`](skills/study/scripts/appledore.py) | The vault's index and checks. |
 | [`agents/`](agents) | Claude Code only: the `study` main agent and the tool-less `cold-reader`. |
 | [`.claude-plugin/`](.claude-plugin) | The plugin manifest and its marketplace. |
 | [`tests/`](tests) | `python3 -m unittest discover -s tests` |
