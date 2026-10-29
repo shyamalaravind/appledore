@@ -67,17 +67,12 @@ and its fixes roughly double the time a note takes, and the writing rules alone 
 quality. Skip it if your host can't start a helper agent with no tools. In Claude Code, it is the
 plugin's `cold-reader` agent.
 
-1. **The brief:** the text of `cold-read.md` in this skill's folder, then the reader, then the
-   note.
-   - **The reader:** the topic note's `Starting from:` line, plus the title and `summary` of each
-     note in `builds_on`. That is all the cold reader may assume.
-   - **The note:** its text with line numbers, frontmatter included, because the body doesn't
-     repeat the `summary`. For a subtopic with children, each note's title, then its numbered text.
-
-   Never give it the writing rules: it tests what the text gives a newcomer, not whether the text
-   follows rules.
-2. **Start a fresh helper** with the brief as its prompt. It sees nothing else, which is what
-   makes the read cold.
+1. **The brief:** run `appledore brief "<title>"`. It prints the text of `cold-read.md`, the reader
+   (the topic's `Starting from:` line, and the title and `summary` of each note in `builds_on`)
+   and the note's text with line numbers. Add nothing to it, not even the writing rules: the read
+   tests what the text gives a newcomer, not whether the text follows rules.
+2. **Start a fresh helper** with that output, word for word, as its prompt. It sees nothing else,
+   which is what makes the read cold.
 3. **Fix** what it reports where the text is at fault: a term used before it's defined, a concept
    whose reason to exist it couldn't find, a rule without its reason, a bare fact, too much new at
    once, a part it couldn't paraphrase, a place it read twice. Find the writing rule each finding

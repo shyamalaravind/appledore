@@ -1,51 +1,43 @@
 # Wrap up
 
-A session adds notes faster than anyone tidies them, so each one ends with a review of the parts
-of the vault it touched. Small fixes made every session keep the MOC chains short enough to
-navigate, which a big clean-up months later can't.
+A session adds notes faster than anyone tidies them, so each one ends with a review of what it
+touched. Small fixes every session keep the MOC chains short enough to navigate, which a big
+clean-up months later can't.
 
-## 1. Find what the session touched
+## 1. Review
 
-1. `git -C "<vault>" status --porcelain` lists the notes changed since the last commit, and so
-   since the last wrap-up.
-2. `appledore related` on each, for its chain up to a root MOC. The MOCs and parent notes on those
-   chains are what you review.
+Run `appledore review`. It lists the notes changed since the vault's last commit, the chains above
+them, and each finding on them with its fix. A topic the user says is done counts as finished too:
+ask whether its `status` becomes `done`.
 
-## 2. Review
+## 2. Propose, then apply
 
-- **`appledore check`:** every warning on a touched note or chain:
-  - a MOC with two children or fewer (dissolve it), or a note with more than 30 (split it, or
-    group some under a MOC);
-  - a subtopic outside 150–450 words (fix it as `writing-rules.md` rule 7 says), or one missing a
-    fixed part, with a Left out list outside 2–4 or with more than three bold terms (rules 7, 8,
-    10 and 11);
-  - a summary over 25 words (cut it to one sentence);
-  - a learning graph out of date;
-  - an empty or Untitled Base (delete it, or name it for what it lists).
-- **New children:** a `type: note` that now has children gets `![[Children.base]]` at the end of
-  its body, before Sources, so they're listed. One with five or more might be better as a MOC. A
-  topic or a subtopic never gets it, because its Learning graph or its Left out list already
-  lists its children.
-- **Duplicates:** `appledore find` on each new note's title, aliases and key words. Two notes on
-  one concept are merged.
-- **Orphans:** the notes `appledore tree` lists outside every chain.
-- **A finished topic:** `appledore next "<topic>"` shows no planned stubs left, or the user says
-  the topic is done. Ask whether its `status` becomes `done`. The stubs left out don't count,
-  because they wait for a deep dive: the session ends with their list (step 4).
+Give the changes as one numbered list, each with its reason in a few words, and apply the ones the
+user says yes to: renames with `appledore mv`, merges as study rule 6 says, and a subtopic's size
+as `writing-rules.md` rule 7 says. Merge a likely duplicate only if both notes hold one concept,
+because some only share words. If nothing needs changing, say so in one line.
 
-## 3. Propose, then apply
+## 3. Commit
 
-Give every change as one numbered list, each with its reason in a few words, and apply the ones
-the user says yes to: renames with `appledore mv`, and merges as study rule 6 says. Then
-`appledore check` must show no errors. If nothing needs changing, say so in one line.
+First show the user each line the review marked `[not a note]` or `[deleted]`, because the commit
+takes every change in the vault, settings and attachments included, and only the user knows which
+were meant.
 
-## 4. Commit and push
+Then run `appledore commit` with a message that names the topic and what the session added, on
+standard input from a quoted heredoc:
 
-1. If a rename changed only the letter case of a file name, run `git -C "<vault>" rm --cached
-   "<old path>"` first, because the vault repo ignores case and would otherwise miss the rename.
-2. `git -C "<vault>" add -A`, then commit with a message that names the topic and what the session
-   added, such as "Study Azure Blob Storage: access tiers, lifecycle rules".
-3. `git -C "<vault>" push`. If the push fails, say why, and leave the commit in place.
+```sh
+appledore commit -F - <<'EOF'
+Study Azure Blob Storage: access tiers, lifecycle rules
+EOF
+```
+
+Never put the message in double quotes, because the shell runs a backtick span and expands a `$`
+inside them. The commit lists every file it takes, pushes once, and refuses while git needs the
+user (a merge in progress, say) or `appledore check` finds errors. If the user declines a fix it
+needs, leave the work uncommitted and tell them, because committing with git yourself skips these
+checks. If the push fails, tell the user why: the commit stays, and a retry is theirs, because it
+may need a login or a fix on the remote.
 
 End with one line: what the session added (notes written, answers filed, stubs added) and what's
 ready next. For a finished topic, follow it with the topic's stubs to explore, as
