@@ -1,7 +1,5 @@
 # HTTP caching field guide, part 1: caches and freshness
 
-<!-- A source page for appledore's evals. Its facts follow RFC 9111, HTTP Caching. -->
-
 ## What an HTTP cache is
 
 An HTTP cache stores responses so that a later request can be answered without asking the origin server again. A response served from a cache saves a round trip, and it spares the origin the work of building the response again.

@@ -1,0 +1,24 @@
+schema_version: "1.1"
+name: just-answer-holds-next-turn
+description: >-
+  After "just answer" in an earlier turn, the question case 02 asks gets its answer with no offer
+  to file it, because the setting holds for the rest of the session.
+tags: [file, read-only, multi-turn]
+context:
+  scaffold_script: scaffold.sh
+  history_file: history.jsonl
+execution:
+  # The recorded turn holds no skill load, and a resumed session answers a plain question without
+  # loading one, so this turn starts the study skill by its command; the skill then finds "just
+  # answer" in the earlier turn. A command is not a Skill tool call, so the case has no
+  # loads-study-skill grader.
+  prompt: >-
+    /appledore:study Continue studying HTTP caching. Before the next subtopic, a question about [[HTTP cache]]:
+    will the browser's cache reuse the response to a POST request, such as the results page of a
+    search form?
+  max_turns: 40
+  timeout_seconds: 600
+  allowed_tools: [Read, Glob, Grep, Skill, Bash, Write, Edit]
+  append_system_prompt: >-
+    The study vault for this session is the folder `vault` in the current working directory, and
+    the shell sets APPLEDORE_VAULT to it.

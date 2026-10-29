@@ -3,7 +3,7 @@ name: deep-dive-proposes-and-waits
 description: >-
   "deep dive X" on a left-out stub proposes 1 to 4 new nodes, each with a summary and what it
   builds on, and writes nothing until the user says yes.
-tags: [deep-dive, plan]
+tags: [deep-dive, plan, read-only]
 context:
   scaffold_script: scaffold.sh
 execution:

@@ -1,5 +1,5 @@
 ---
-summary: "When a copy is stale, a cache asks the origin whether it changed, with ETag or Last-Modified, and a 304 reply confirms it without the body."
+summary: "A cache asks the origin whether a stale copy changed, using ETag or Last-Modified, and a 304 reply confirms it without the body."
 mocs:
   - "[[HTTP caching]]"
 builds_on:

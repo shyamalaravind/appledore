@@ -3,7 +3,7 @@ name: appledore-question-no-offer
 description: >-
   A question about appledore itself gets a direct answer and no offer to file it, because only
   answers about the subject belong in the vault.
-tags: [file, routing]
+tags: [file, routing, read-only]
 context:
   scaffold_script: scaffold.sh
 execution:

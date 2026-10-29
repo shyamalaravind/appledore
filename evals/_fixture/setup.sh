@@ -5,6 +5,16 @@
 # folder and a temporary HOME. It never touches the operator's real vault.
 set -euo pipefail
 
+# Refuse to run with the real home folder, because the profile lines below would point
+# APPLEDORE_VAULT in every later shell at this scratch copy, and real study sessions would write
+# their notes there.
+real_home="$(python3 -c 'import os, pwd; print(os.path.realpath(pwd.getpwuid(os.getuid()).pw_dir))')"
+if [ "$(cd "$HOME" && pwd -P)" = "$real_home" ]; then
+    echo "setup.sh: HOME is your real home folder. Run it only through 'claude plugin eval --scaffold'," >&2
+    echo "which gives it a temporary one, or set HOME to an empty folder first." >&2
+    exit 1
+fi
+
 fixture="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$fixture/../.." && pwd)"
 workspace="$PWD"

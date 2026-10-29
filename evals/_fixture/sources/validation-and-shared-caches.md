@@ -1,7 +1,5 @@
 # HTTP caching field guide, part 2: validation and shared caches
 
-<!-- A source page for appledore's evals. Its facts follow RFC 9111, HTTP Caching, and RFC 9110, HTTP Semantics. -->
-
 ## Validation
 
 When a stored response is stale, a cache can ask the origin whether it is still good instead of downloading it again. This is **revalidation**, and it uses a conditional request.

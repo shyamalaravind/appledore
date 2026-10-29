@@ -1,5 +1,5 @@
 ---
-summary: "HTTP caches reuse stored responses to skip round trips: freshness says how long a copy is reusable, and validation checks a stale copy with the origin."
+summary: "HTTP caches reuse stored responses to skip round trips: freshness sets how long, and validation checks a stale copy with the origin."
 type: topic
 status: learning
 mocs:

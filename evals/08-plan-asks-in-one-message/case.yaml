@@ -3,7 +3,7 @@ name: plan-asks-in-one-message
 description: >-
   A topic with no topic note starts the plan: one message asks for the sources, the goal and
   starting point, and the placement, each with a recommendation, and writes nothing yet.
-tags: [plan]
+tags: [plan, read-only]
 context:
   scaffold_script: scaffold.sh
 execution:
