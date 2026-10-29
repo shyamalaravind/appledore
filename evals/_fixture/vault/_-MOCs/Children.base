@@ -1,0 +1,10 @@
+filters:
+  and:
+    - mocs.contains(this)
+views:
+  - type: table
+    name: Children
+    order:
+      - file.name
+      - summary
+      - type

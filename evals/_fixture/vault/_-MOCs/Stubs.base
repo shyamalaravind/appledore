@@ -1,0 +1,13 @@
+filters:
+  and:
+    - file.inFolder("Stubs")
+views:
+  - type: table
+    name: Stubs
+    order:
+      - file.name
+      - summary
+      - mocs
+      - created
+    columnSize:
+      file.name: 319

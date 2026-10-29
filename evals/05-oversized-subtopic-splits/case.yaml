@@ -1,0 +1,18 @@
+schema_version: "1.1"
+name: oversized-subtopic-splits
+description: >-
+  Filing an answer into a subtopic at its 450-word limit leads to a proposal to move a part
+  into a new planned subtopic of the learning graph, never into a child note.
+tags: [file, size]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  prompt: >-
+    Continue studying HTTP caching. I'm reading [[Freshness]]: when a response has both max-age
+    and Expires, which one does a cache use? File the answer into Freshness.
+  max_turns: 60
+  timeout_seconds: 900
+  allowed_tools: [Read, Glob, Grep, Skill, Bash, Write, Edit]
+  append_system_prompt: >-
+    The study vault for this session is the folder `vault` in the current working directory, and
+    the shell sets APPLEDORE_VAULT to it.

@@ -1,0 +1,19 @@
+schema_version: "1.1"
+name: subject-question-offers-filing
+description: >-
+  A question about the subject gets a short answer from the agreed sources and ends with a
+  one-line offer to file it, and nothing is written before the user's yes.
+tags: [file]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  prompt: >-
+    Continue studying HTTP caching. Before the next subtopic, a question about [[HTTP cache]]:
+    will the browser's cache reuse the response to a POST request, such as the results page of a
+    search form?
+  max_turns: 40
+  timeout_seconds: 600
+  allowed_tools: [Read, Glob, Grep, Skill, Bash, Write, Edit]
+  append_system_prompt: >-
+    The study vault for this session is the folder `vault` in the current working directory, and
+    the shell sets APPLEDORE_VAULT to it.
