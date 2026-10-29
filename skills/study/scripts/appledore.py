@@ -10,7 +10,7 @@ Usage: appledore.py [--vault PATH] COMMAND ...
   related NOTE                        a note's chain, children, prerequisites and links
   backlinks NOTE                      every note that links to NOTE, and where
   graph TOPIC [--write]               a topic's learning graph, derived from builds_on
-  next TOPIC [--left-out]             its planned subtopics: ready, waiting, and the stubs left out
+  next TOPIC [--left-out]             its planned subtopics: recommended, ready, waiting, left out
   check                               the vault's invariants; exits 1 on any error
   convert [NOTE ...] [--write]        legacy inline **MOCs**: fields to YAML frontmatter
   mv NOTE NEW [--alias] [--dry-run]   rename or move a note and rewrite every link to it
@@ -826,19 +826,22 @@ def cmd_next(vault: Vault, args):
         print_left_out(vault, topic, rows)
         return
     written = [n for _, n, _ in rows if n.kind == "subtopic"]
-    planned = [n for _, n, left in rows if n.kind == "stub" and not left]
+    planned = [(level, n) for level, n, left in rows if n.kind == "stub" and not left]
     left_out = [n for _, n, left in rows if left]
-    ready, waiting = [], []
-    for n in planned:
+    ready, waiting, ready_rows = [], [], []
+    for level, n in planned:
         prereqs = vault.prerequisites(n)
         missing = [p.title if isinstance(p, Note) else "(unresolved)" for p in prereqs
                    if not isinstance(p, Note) or p.kind == "stub"]
         if missing:
             waiting.append(f"{label(n)}  (waits for: {', '.join(missing)})")
         else:
+            ready_rows.append((level, n))
             ready.append(f"{label(n)}  (builds on: {', '.join(p.title for p in prereqs) or 'nothing'})")
     print(f"{topic.title}: {len(written)} subtopic{'' if len(written) == 1 else 's'} written, "
           f"{len(planned)} planned, {len(left_out)} left out")
+    if ready_rows:  # the shallowest ready node, ties in drawing order, so "next" never has to ask
+        print(f"recommended: {min(ready_rows, key=lambda row: row[0])[1].title}")
     section("ready", ready)
     section("waiting", waiting)
     section("left out", [f"{label(n)}  (left out by: {vault._first_parent(n).title})" for n in left_out])
@@ -1265,7 +1268,7 @@ def main(argv=None):
     p.add_argument("--write", action="store_true", help="redraw the topic note's Learning graph section")
     p.set_defaults(run=cmd_graph)
 
-    p = sub.add_parser("next", help="a topic's planned subtopics: ready, waiting, and the stubs left out")
+    p = sub.add_parser("next", help="a topic's planned subtopics: recommended, ready, waiting, and the stubs left out")
     p.add_argument("topic")
     p.add_argument("--left-out", action="store_true",
                    help="only the stubs left out, as links grouped by the note that left each out")
