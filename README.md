@@ -169,9 +169,15 @@ There is no index file to fall out of date. Every command reads the notes themse
 | `graph <topic> [--write]` | the topic's learning graph, drawn from `builds_on` |
 | `next <topic> [--left-out]` | the planned subtopics that are ready, the ones waiting, and the stubs left out; `--left-out` lists only those, grouped by the note that left each out |
 | `open <note>` | open a note in Obsidian and print its `obsidian://` link; `APPLEDORE_OPEN=0` only prints the link |
-| `check` | the vault's invariants and each subtopic's shape, run after every write; an error exits 1, a warning doesn't |
+| `check` | the vault's invariants and each subtopic's shape, run after every write; an error exits 1, a warning doesn't. It only reads |
 | `mv <note> <new>` | rename or move a note, rewriting every link to it |
+| `new <kind> <title> key=value …` | create a topic, subtopic, note, stub, MOC or child (a part split off another note) from the vault's own template, with its properties filled in; it refuses a name that is already a title or an alias |
+| `promote <note> <kind> [key=value …]` | turn a stub or a note into a topic, subtopic or note, setting any properties given: a stub moves to `_Main Notes/`, and one with no text yet gets that template's parts |
+| `set <note> key=value …` | set a note's properties without touching its other lines; `key+=value` adds to a list and `key-=value` takes out of one |
+| `merge <note> <into>` | fold a note into another and delete it: every link now points at `<into>`, which takes its name as an alias, its prerequisites and its sources, with its summary and text under `## Merged from <note>` |
 | `convert` | legacy inline fields to YAML frontmatter |
+
+The write commands (`mv`, `new`, `promote`, `set` and `merge`) take `--dry-run`, which prints the diff and writes nothing. Each refuses a change that would add a `check` error, writing nothing, and redraws the learning graph of each topic whose graph holds a note it changed. A `-` among their arguments reads `key=value` lines from standard input, so free text can come in a quoted heredoc, which the shell doesn't expand.
 
 ## The repo
 

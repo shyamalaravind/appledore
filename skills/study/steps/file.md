@@ -39,8 +39,8 @@ rest of the session, until they ask for it back. A "file this" still files that 
 1. Write each passage to `writing-rules.md` rules 13 and 14.
 2. **Check the size.** If a subtopic goes past 450 words, propose the fix `writing-rules.md`
    rule 7 gives, and make it on the user's yes.
-3. For a new subtopic, create its stub in `Stubs/` as `plan` step 4 does, run
-   `appledore graph "<topic>" --write`, and use `learn` to write it, around the question.
+3. For a new subtopic, create its stub as `plan` step 4 does, and use `learn` to write it, around
+   the question.
 4. `appledore check`.
 
 Then open the note to read first with `appledore open`, unless `learn` already opened one in

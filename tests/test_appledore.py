@@ -480,16 +480,423 @@ class MoveTests(VaultTest):
 
     def test_move_to_folder_and_case_only_rename(self):
         self.small_vault()
-        self.run_cli("mv", "AMQP", "_Main Notes/")
-        self.assertEqual(self.vault().get("AMQP").kind, "note")
+        self.write("_Main Notes/Topics.md", note("Topics.", ["Queue"], type="note"))
+        self.run_cli("mv", "Topics", "Stubs/")
+        self.assertEqual(self.vault().get("Topics").kind, "stub")
         out, code = self.run_cli("mv", "Peek-lock", "peek-lock")
         self.assertEqual(code, 0, out)
         self.assertIn("peek-lock.md", [p.name for p in (self.root / "_Main Notes").iterdir()])
+
+    def test_refuses_a_move_that_check_would_reject(self):
+        # A stub in _Main Notes/ has no type: appledore promote is the way to make it a written note.
+        self.small_vault()
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            out, code = self.run_cli("mv", "AMQP", "_Main Notes/")
+            self.assertEqual(self.run_cli("mv", "Queue", ".Queue")[1], 2)
+        self.assertEqual(code, 2, out)
+        self.assertIn("a stub becomes a written note with appledore promote 'AMQP'", err.getvalue())
+        self.assertIn("can't start with a dot", err.getvalue())
+        self.assertTrue((self.root / "Stubs/AMQP.md").exists())
 
     def test_refuses_a_clash(self):
         self.small_vault()
         out, code = self.run_cli("mv", "Queue", "sessions")
         self.assertEqual(code, 2)
+
+
+TEMPLATES = Path(__file__).resolve().parent / "templates"  # the vault's templates, kept apart from the evals' fixture
+NOW = appledore.datetime.datetime(2026, 10, 29, 9, 30)
+
+
+class WriteTest(VaultTest):
+    """A small vault with the vault's own templates, which the write commands fill in, and a clock
+    that stands still."""
+
+    def setUp(self):
+        super().setUp()
+        self.small_vault()
+        for template in TEMPLATES.iterdir():
+            self.write(f"__templates/{template.name}", template.read_text(encoding="utf-8"))
+        self.run_cli("graph", "Service Bus", "--write")
+        clock = mock.patch.object(appledore, "now", lambda: NOW)
+        clock.start()
+        self.addCleanup(clock.stop)
+
+    def run_err(self, *argv, stdin=""):
+        """Run the command line with stdin, as UTF-8, on its standard input, which reports cp1252, as
+        a pipe does on Windows; return (stdout, stderr, exit code)."""
+        err = io.StringIO()
+        pipe = io.TextIOWrapper(io.BytesIO(stdin.encode("utf-8")), encoding="cp1252")
+        with contextlib.redirect_stderr(err), mock.patch.object(appledore.sys, "stdin", pipe):
+            out, code = self.run_cli(*argv)
+        return out, err.getvalue(), code
+
+    def read(self, rel):
+        return (self.root / rel).read_text(encoding="utf-8")
+
+    def snapshot(self):
+        """Every file in the vault, and its bytes."""
+        return {p.relative_to(self.root).as_posix(): p.read_bytes() for p in self.root.rglob("*") if p.is_file()}
+
+    def assertClean(self):
+        errors, _ = appledore.check(self.vault())
+        self.assertEqual(errors, [])
+
+    def assertRefused(self, argv, message, stdin=""):
+        before = self.snapshot()
+        out, err, code = self.run_err(*argv, stdin=stdin)
+        self.assertEqual(code, 2, (argv, out))
+        self.assertIn(message, err, argv)
+        self.assertEqual(self.snapshot(), before, argv)
+
+
+class NewTests(WriteTest):
+    def test_a_stub_from_the_template_with_values_from_stdin(self):
+        # A quoted heredoc passes $ and backticks, which the shell would expand inside double quotes.
+        out, err, code = self.run_err("new", "stub", "Dead-letter queue", "-", "mocs=Service Bus", stdin=(
+            "summary=Where a message goes after `maxDeliveryCount` tries, at $0.\n"
+            "builds_on=[[Peek-lock]]\nbuilds_on=queue\n\n"
+            "source=[Dead-letter queues](https://learn.microsoft.com/dlq)\nsource+=- [Settling](https://x.y/settle)\n"))
+        self.assertEqual(code, 0, err)
+        self.assertEqual(out, "created Stubs/Dead-letter queue.md\n"
+                              "redrew the learning graph in _Main Notes/Service Bus.md\n")
+        self.assertEqual(self.read("Stubs/Dead-letter queue.md"),
+                         "---\nsummary: Where a message goes after `maxDeliveryCount` tries, at $0.\n"
+                         'mocs:\n  - "[[Service Bus]]"\nbuilds_on:\n  - "[[Peek-lock]]"\n  - "[[Queue]]"\n'
+                         'aliases: []\ncreated: "2026-10-29"\n---\n## Sources\n'
+                         "- [Dead-letter queues](https://learn.microsoft.com/dlq)\n- [Settling](https://x.y/settle)\n")
+        self.assertIn("    - [[Dead-letter queue]] · stub", self.read("_Main Notes/Service Bus.md"))
+        self.assertClean()
+
+    def test_stdin_is_utf_8_and_a_dash_must_read_something(self):
+        out, err, code = self.run_err("set", "Queue", "-", stdin="summary=A cache in a café keeps a copy — for an hour.\n")
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.vault().get("Queue").summary, "A cache in a café keeps a copy — for an hour.")
+        self.assertRefused(["set", "Queue", "-"], "read no key=value line", stdin="\n")
+
+    def test_a_child_from_the_child_template(self):
+        out, code = self.run_cli("new", "child", "Session state", "summary=State kept per session.", "mocs=Sessions",
+                                 "source=[State](https://x.y/state)")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.read("_Main Notes/Session state.md"),
+                         '---\nsummary: State kept per session.\ntype: subtopic\nmocs:\n  - "[[Sessions]]"\n'
+                         'builds_on: []\naliases: []\ncreated: "2026-10-29"\n---\n\n\n'
+                         "## Sources\n- [State](https://x.y/state)\n")
+        self.write("_Main Notes/Hub.md", note("A hub.", ["Azure MOC"], type="note"))
+        self.run_cli("new", "child", "Spoke", "summary=Part of the hub.", "mocs=Hub")
+        self.assertIn("type: note\nmocs:\n", self.read("_Main Notes/Spoke.md"))
+        # A planned stub is a subtopic still being written, so its part is a subtopic too.
+        self.write("Stubs/Topics.md", note("Topics.", ["Service Bus"], builds_on=["[[Queue]]"]))
+        self.run_cli("new", "child", "Subscriptions", "summary=Where a topic's copies wait.", "mocs=Topics")
+        self.assertIn("type: subtopic\n", self.read("_Main Notes/Subscriptions.md"))
+        self.assertClean()
+
+    def test_a_topic_and_a_moc(self):
+        out, code = self.run_cli("new", "moc", "Messaging MOC", "summary=Messaging services.", "mocs=Azure MOC")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.read("_-MOCs/Messaging MOC.md"), "---\nsummary: Messaging services.\nmocs:\n"
+                                                               '  - "[[Azure MOC]]"\ncreated: "2026-10-29"\n---\n![[Children.base]]\n')
+        out, code = self.run_cli("new", "topic", "Event Grid", "summary=Events pushed to handlers.", "mocs=Messaging MOC",
+                                 "builds_on=Service Bus")
+        self.assertEqual(code, 0, out)
+        text = self.read("_Main Notes/Event Grid.md")
+        self.assertIn("type: topic\nstatus: learning\nmocs:\n", text)
+        self.assertIn("## Learning graph\n" + appledore.GRAPH_COMMENT, text)
+        self.assertNotIn("{{", text)
+        self.assertClean()
+
+    def test_refuses_a_name_that_is_taken(self):
+        self.write("_Main Notes/Topics.md", note("Topics.", ["Service Bus"], type="note", aliases=["Pub-sub"]))
+        decomposed = unicodedata.normalize("NFD", "Café cache")  # how some tools write é to disk
+        self.write(f"Stubs/{decomposed}.md", note("A cache in a café.", ["Queue"]))
+        for title, message in (("peek lock", "already a note: _Main Notes/Peek-lock.md"),
+                               ("pub sub", "already an alias of a note: _Main Notes/Topics.md"),
+                               ("Café cache", "already a note: Stubs/Café cache.md")):
+            self.assertRefused(["new", "stub", title, "summary=s.", "mocs=Queue"], message)
+
+    def test_never_overwrites_a_file(self):
+        self.write("Stubs/Kept.md", "kept\n")
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            appledore.write_note(self.root / "Stubs/Kept.md", "new\n", create=True)
+        self.assertEqual(self.read("Stubs/Kept.md"), "kept\n")
+        appledore.write_note(self.root / "Stubs/Kept.md", "swapped\n")
+        self.assertEqual(self.read("Stubs/Kept.md"), "swapped\n")
+        self.assertEqual(sorted(p.name for p in (self.root / "Stubs").iterdir()), ["AMQP.md", "Kept.md"])
+
+    def test_refuses_what_check_would_reject(self):
+        for argv, message in ((["topic", "DNS", "summary=s.", "mocs=Azure MOC", "status="], "DNS.md: missing status"),
+                              (["stub", "Resolver", "summary=s.", "mocs=Queue", "created="], "Resolver.md: missing created"),
+                              (["stub", "X", "mocs=Queue"], "X.md: missing summary"),
+                              (["stub", "X", "summary=s."], "X.md: no mocs"),
+                              (["stub", "X", "summary=s.", "mocs=Queue", "aliases=Sessions"], "alias 'Sessions' is the title"),
+                              (["stub", "X", "summary=s.", "mocs=Missing"], "no note named 'Missing'"),
+                              (["moc", "Messaging", "summary=s."], "ends in ' MOC'"),
+                              (["stub", "A/B", "summary=s.", "mocs=Queue"], "a title can't hold"),
+                              (["note", ".NET", "summary=s.", "mocs=Queue"], "can't start with a dot"),
+                              (["note", "X", "summary=s.", "mocs=Queue", "type=topic"], "the kind sets the type"),
+                              (["stub", "X", "summary=s.", "mocs=Queue", "colour=red"], "unknown property 'colour'")):
+            self.assertRefused(["new", *argv], message)
+
+    def test_names_a_close_spelling(self):
+        out, code = self.run_cli("new", "stub", "Queues", "summary=s.", "mocs=Queue")
+        self.assertEqual(code, 0, out)
+        self.assertIn("names already close to it: Queue (_Main Notes/Queue.md)", out)
+
+    def test_dry_run_prints_the_diff_and_writes_nothing(self):
+        before = self.snapshot()
+        out, code = self.run_cli("new", "stub", "Topics", "--dry-run", "summary=Fan-out.", "mocs=Service Bus")
+        self.assertEqual(code, 0, out)
+        self.assertTrue(out.startswith("dry run, so nothing was written:\ncreated Stubs/Topics.md\n"
+                                       "redrew the learning graph in _Main Notes/Service Bus.md\n"), out)
+        self.assertIn("--- /dev/null\n+++ b/Stubs/Topics.md\n", out)
+        self.assertIn("+- [[Topics]] · stub\n", out)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_fills_obsidians_placeholders(self):
+        self.assertEqual(appledore.fill_template("{{title}} {{date}} {{date:DD/MM/YY}} {{ time }} {{time:HH:mm:ss}} "
+                                                 "{{content}}|{{fromTitle}}|100%", "Note", NOW, {"fromTitle": "Hub"}),
+                         "Note 2026-10-29 29/10/26 09:30 09:30:00 |Hub|100%")
+        for fmt in ("dddd, MMMM Do YYYY", "YYYY-MM-DD[T]HH"):
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                appledore.fill_template("{{date:%s}}" % fmt, "Note", NOW)
+
+
+class PromoteTests(WriteTest):
+    def test_a_stub_becomes_a_subtopic(self):
+        self.write("Stubs/Dead-letter.md", '---\nsummary: Dead letters.\nmocs:\n  - "[[Service Bus]]"\n'
+                                           'builds_on: ["[[Peek-lock]]"]\ncreated: "2026-10-21"\n---\n'
+                                           "## Sources\n- [DLQ](https://x.y/dlq)\n  - part 2\n")
+        self.write("_Main Notes/Other.md", note("o", ["Azure MOC"], type="note")
+                   + "| a | [[Stubs/Dead-letter\\|it]] |\n\n[[dead-letter]] stays as written.\n")
+        self.run_cli("graph", "Service Bus", "--write")
+        out, code = self.run_cli("promote", "Dead-letter", "subtopic")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out, "Stubs/Dead-letter.md → _Main Notes/Dead-letter.md: now a subtopic\n"
+                              "redrew the learning graph in _Main Notes/Service Bus.md\n")
+        self.assertFalse((self.root / "Stubs/Dead-letter.md").exists())
+        self.assertEqual(self.read("_Main Notes/Dead-letter.md"),
+                         '---\nsummary: Dead letters.\ntype: subtopic\nmocs:\n  - "[[Service Bus]]"\n'
+                         'builds_on: ["[[Peek-lock]]"]\naliases: []\ncreated: "2026-10-21"\n---\n'
+                         "**In short:**\n\n**Example:**\n\n## In an interview\n-\n\n## Left out on purpose\n-\n\n"
+                         "## Sources\n- [DLQ](https://x.y/dlq)\n  - part 2\n")
+        self.assertIn("| a | [[Dead-letter\\|it]] |\n\n[[dead-letter]] stays as written.", self.read("_Main Notes/Other.md"))
+        self.assertIn("  - [[Dead-letter]]\n", self.read("_Main Notes/Service Bus.md"))
+        self.assertClean()
+
+    def test_a_stub_keeps_the_text_written_into_it(self):
+        self.write("Stubs/Dead-letter.md", note("Dead letters.", ["Service Bus"], builds_on=["[[Peek-lock]]"])
+                   + shaped(200) + "\n## Sources\n- [DLQ](https://x.y/dlq)\n")
+        out, err, code = self.run_err("promote", "Dead-letter", "subtopic", "-",
+                                      stdin="summary=A message that keeps failing waits in the dead-letter queue.\n")
+        self.assertEqual(code, 0, err)
+        text = self.read("_Main Notes/Dead-letter.md")
+        self.assertIn("summary: A message that keeps failing waits in the dead-letter queue.\ntype: subtopic\n", text)
+        self.assertTrue(text.endswith("---\n" + shaped(200) + "\n## Sources\n- [DLQ](https://x.y/dlq)\n"), text)
+
+    def test_a_note_keeps_its_body(self):
+        self.write("_Main Notes/Topics.md", note("Topics.", ["Azure MOC"], type="note") + "Fan-out to subscriptions.\n")
+        out, code = self.run_cli("promote", "Topics", "subtopic", "mocs=Service Bus", "builds_on=Queue")
+        self.assertEqual(code, 0, out)
+        text = self.read("_Main Notes/Topics.md")
+        self.assertIn('type: subtopic\nmocs:\n  - "[[Service Bus]]"\nbuilds_on:\n  - "[[Queue]]"\n', text)
+        self.assertTrue(text.endswith("---\nFan-out to subscriptions.\n"))
+        self.assertIn("  - [[Topics]]", self.read("_Main Notes/Service Bus.md"))
+
+    def test_never_replaces_another_note(self):
+        self.write("_Main Notes/Vary header.md", note("Written.", ["Service Bus"], type="note") + "Text.\n")
+        self.write("Stubs/Vary header.md", note("A stub.", ["Queue"]))
+        self.write("Stubs/sessions.md", note("A stub named like a note but for its case.", ["Queue"]))
+        self.assertRefused(["promote", "Stubs/Vary header", "subtopic"], "'Vary header' already exists: _Main Notes/Vary header.md")
+        self.assertRefused(["promote", "Stubs/sessions", "note"], "'sessions' already exists: _Main Notes/Sessions.md")
+
+    def test_refuses_a_moc(self):
+        self.assertRefused(["promote", "Azure MOC", "topic"], "only a stub or a note")
+
+
+class SetTests(WriteTest):
+    def test_lists_and_values(self):
+        self.write("_Main Notes/Topics.md", '---\nsummary: Topics.  # fan-out\ntype: note\nmocs: ["[[Azure MOC]]"]\n'
+                                            'aliases:\n  - Pub-sub\ncreated: "2026-10-21"\n---\nBody stays.\n')
+        out, code = self.run_cli("set", "Topics", "builds_on=Queue", "builds_on=[[Sessions|s]]", "aliases+=Fan-out",
+                                 "aliases-=pub sub")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out, "_Main Notes/Topics.md: set builds_on, aliases\n")
+        self.assertEqual(self.read("_Main Notes/Topics.md"),
+                         '---\nsummary: Topics.  # fan-out\ntype: note\nmocs: ["[[Azure MOC]]"]\n'
+                         'builds_on:\n  - "[[Queue]]"\n  - "[[Sessions]]"\naliases:\n  - Fan-out\n'
+                         'created: "2026-10-21"\n---\nBody stays.\n')
+        out, _ = self.run_cli("set", "Topics", "builds_on-=sessions", "type=subtopic", "mocs=Service Bus", "aliases=")
+        self.assertIn("redrew the learning graph in _Main Notes/Service Bus.md", out)
+        text = self.read("_Main Notes/Topics.md")
+        self.assertIn('type: subtopic\nmocs:\n  - "[[Service Bus]]"\nbuilds_on:\n  - "[[Queue]]"\naliases: []\n', text)
+        self.run_cli("set", "Service Bus", "--dry-run", "status=done")
+        self.assertIn("\nstatus: learning\n", self.read("_Main Notes/Service Bus.md"))
+        self.run_cli("set", "Service Bus", "status=done")
+        self.assertIn("\nstatus: done\n", self.read("_Main Notes/Service Bus.md"))
+        out, _ = self.run_cli("set", "Service Bus", "status=done")
+        self.assertEqual(out, "_Main Notes/Service Bus.md: already set\n")
+
+    def test_an_empty_value_removes_a_property(self):
+        self.run_cli("set", "Queue", "aliases+=FIFO", "url=https://x.y/queues")
+        self.assertEqual(self.vault().get("Queue").fm["url"], "https://x.y/queues")
+        self.run_cli("set", "Queue", "url=", "aliases=")
+        self.assertNotIn("url", self.vault().get("Queue").fm)
+        self.assertEqual(self.vault().get("Queue").fm["aliases"], [])
+
+    def test_refuses_what_check_would_reject(self):
+        self.write("_Main Notes/Topics.md", note("Topics.", ["Azure MOC"], type="note"))
+        for argv, message in ((["Topics", "mocs=Missing"], "no note named 'Missing'"),
+                              (["Topics", "builds_on=Topics"], "builds_on cycle: Topics → Topics"),
+                              (["Topics", "aliases+=queue"], "alias 'queue' is the title of _Main Notes/Queue.md"),
+                              (["Topics", "type=hub"], "type must be one of topic, subtopic, note"),
+                              (["Topics", "summary="], "missing summary"),
+                              (["Service Bus", "status=finished"], "status must be one of done, learning"),
+                              (["Topics", "summary+=more"], "summary holds one value"),
+                              (["Topics", "builds_on-=Queue"], "isn't in builds_on"),
+                              (["Topics", "summary"], "isn't key=value"),
+                              (["Topics", "source=[x](https://x.y)"], "only to a new note"),
+                              (["AMQP", "type=note"], "appledore promote")):
+            self.assertRefused(["set", *argv], message)
+
+    def test_an_error_the_note_already_had_is_not_blamed_on_the_write(self):
+        # Each write moves an unresolved link the vault already had to another line, or, for the
+        # merge, into the note kept; neither adds an error, so both go ahead.
+        self.write("_Main Notes/URL.md", note("A web address.", ["Azure MOC"], type="note") + "See [[Percent-encoding]].\n")
+        out, err, code = self.run_err("set", "URL", "aliases+=URI")
+        self.assertEqual(code, 0, err)
+        self.write("_Main Notes/Topics.md", note("Topics.", ["Azure MOC"], type="note") + "Fan-out.\n\n## Sources\n- [[Gone]]\n")
+        out, err, code = self.run_err("merge", "URL", "Topics")
+        self.assertEqual(code, 0, err)
+        errors, _ = appledore.check(self.vault())
+        self.assertEqual(sorted((rel, appledore.LINE_NUMBER.sub("", m)) for rel, m in errors),
+                         [("_Main Notes/Topics.md", "unresolved link [[Gone]] ()"),
+                          ("_Main Notes/Topics.md", "unresolved link [[Percent-encoding]] ()")])
+        self.assertRefused(["set", "Topics", "builds_on=[[Gone]]"], "no note named 'Gone'")
+
+    def test_lines_it_cant_parse_stay(self):
+        self.write("_Main Notes/URL.md", '---\n# kept\nsummary: Old.\ndate modified: 2026-10-01\ntype: note\n'
+                                         'reading.time: 3\n"quoted key": x\nmocs:\n  - "[[Azure MOC]]"\n'
+                                         'created: "2026-10-21"\n---\nBody\n')
+        out, code = self.run_cli("set", "URL", "summary=New.", "mocs=Queue", "aliases+=URI", "status=")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.read("_Main Notes/URL.md"),
+                         '---\n# kept\nsummary: New.\ndate modified: 2026-10-01\ntype: note\nreading.time: 3\n'
+                         '"quoted key": x\nmocs:\n  - "[[Queue]]"\naliases:\n  - URI\ncreated: "2026-10-21"\n---\nBody\n')
+        text = '---\nsummary: >-\n  Folded\n  text.\ncreated: "2026-01-02"\nlocal: x\n---\nBody'
+        self.assertEqual(appledore.set_frontmatter(text, {"summary": "New.", "mocs": ["[[A]]"], "local": appledore.DELETE}),
+                         '---\nsummary: New.\nmocs:\n  - "[[A]]"\ncreated: "2026-01-02"\n---\nBody')
+        self.assertEqual(appledore.set_frontmatter("Body\n", {"tags": []}), "---\ntags: []\n---\nBody\n")
+
+
+class MergeTests(WriteTest):
+    def test_links_names_and_prerequisites_move_to_the_note_kept(self):
+        self.write("Stubs/Dead-letter.md", note("Dead letters.", ["Service Bus"], builds_on=["[[Peek-lock]]"], aliases=["DLQ"]))
+        self.write("_Main Notes/Poison messages.md", note("Messages that keep failing.", ["Azure MOC"], type="note",
+                                                          builds_on=["[[Queue]]"]))
+        self.write("_Main Notes/Other.md", note("o", ["Dead-letter"], type="note",
+                                                builds_on=["[[Dead-letter]]", "[[Poison messages]]"])
+                   + "See [[Dead-letter]], [[Stubs/Dead-letter#Why|why]] and ![[Dead-letter]].\n"
+                   + "| a | [[Dead-letter]] |\n")
+        self.run_cli("graph", "Service Bus", "--write")
+        out, code = self.run_cli("merge", "Dead-letter", "Poison messages")
+        self.assertEqual(code, 0, out)
+        # Six links in Other, and one in the learning graph, which is then redrawn.
+        self.assertEqual(out, "merged Stubs/Dead-letter.md into _Main Notes/Poison messages.md: 7 link(s) in 2 note(s) "
+                              "now point at 'Poison messages', which takes 'Dead-letter' as an alias; "
+                              "Stubs/Dead-letter.md is deleted\n"
+                              "its summary and text sit under '## Merged from Dead-letter' in "
+                              "_Main Notes/Poison messages.md: fold them in\n"
+                              "not kept from 'Dead-letter': mocs: [[Service Bus]]; created: 2026-10-21\n"
+                              "redrew the learning graph in _Main Notes/Service Bus.md\n")
+        self.assertFalse((self.root / "Stubs/Dead-letter.md").exists())
+        kept = self.vault().get("Poison messages")
+        self.assertEqual(kept.aliases, ["Dead-letter", "DLQ"])
+        self.assertEqual(kept.values("builds_on"), ["[[Queue]]", "[[Peek-lock]]"])
+        self.assertEqual(kept.values("mocs"), ["[[Azure MOC]]"])
+        self.assertTrue(kept.text.endswith("---\n\n## Merged from Dead-letter\nSummary: Dead letters.\n"), kept.text)
+        other = self.read("_Main Notes/Other.md")
+        self.assertIn('mocs:\n  - "[[Poison messages]]"\n', other)
+        self.assertIn('builds_on:\n  - "[[Poison messages]]"\n', other)  # listed once
+        self.assertIn("See [[Poison messages|Dead-letter]], [[Poison messages#Why|why]] and ![[Poison messages]].\n"
+                      "| a | [[Poison messages\\|Dead-letter]] |", other)
+        self.assertNotIn("Dead-letter]]", self.read("_Main Notes/Service Bus.md"))
+        self.assertClean()
+
+    def test_its_summary_text_and_sources_are_kept(self):
+        self.write("_Main Notes/Topics.md", note("Topics.", ["Azure MOC"], type="note")
+                   + "Fan-out to [[Topics|them]].\n\n## Sources\n- [Topics](https://x.y/topics)\n  - part 2\n"
+                   + "- [Queues](https://x.y/q)\n")
+        self.write("_Main Notes/Pub-sub.md", note("Pub-sub.", ["Azure MOC"], type="note")
+                   + "One sender, many readers.\n\n## Sources\n- [Queues](https://x.y/q)\n")
+        out, code = self.run_cli("merge", "Topics", "Pub-sub")
+        self.assertEqual(code, 0, out)
+        text = self.read("_Main Notes/Pub-sub.md")
+        self.assertTrue(text.endswith("---\nOne sender, many readers.\n\n## Merged from Topics\nSummary: Topics.\n\n"
+                                      "Fan-out to [[Pub-sub|them]].\n\n## Sources\n- [Queues](https://x.y/q)\n"
+                                      "- [Topics](https://x.y/topics)\n  - part 2\n"), text)
+        _, warnings = appledore.check(self.vault())
+        self.assertIn(("_Main Notes/Pub-sub.md", "'## Merged from Topics' still holds text appledore merge moved in: "
+                                                 "fold it into the note and delete that heading"), warnings)
+
+    def test_refuses_a_merge_that_loses_a_place(self):
+        self.write("_-MOCs/Messaging MOC.md", note("Messaging.", ["Azure MOC"]))
+        for argv, message in ((["Sessions", "AMQP"], "'AMQP' is a stub and 'Sessions' is a written subtopic"),
+                              (["Queue", "AMQP", "--force"], "'AMQP' sits only under 'Queue'"),
+                              (["Service Bus", "Queue"], "'Service Bus' is a topic"),
+                              (["Messaging MOC", "Azure MOC"], "'Messaging MOC' is a moc"),
+                              (["Queue", "queue"], "can't merge into itself")):
+            self.assertRefused(["merge", *argv], message)
+        self.write("Stubs/Ordering.md", note("Ordering.", ["Peek-lock"]))
+        out, err, code = self.run_err("merge", "Sessions", "Ordering", "--force")
+        self.assertEqual(code, 0, err)
+
+    def test_dry_run_lists_every_change(self):
+        before = self.snapshot()
+        out, code = self.run_cli("merge", "Sessions", "Peek-lock", "--dry-run")
+        self.assertEqual(code, 0, out)
+        self.assertTrue(out.startswith("dry run, so nothing was written:\n"
+                                       "merged _Main Notes/Sessions.md into _Main Notes/Peek-lock.md"), out)
+        self.assertIn("not kept from 'Sessions': type: subtopic; created: 2026-10-21\n", out)
+        self.assertIn("+++ b/_Main Notes/Peek-lock.md\n", out)
+        self.assertIn("+++ b/_Main Notes/Service Bus.md\n", out)
+        self.assertIn("delete _Main Notes/Sessions.md\n", out)
+        self.assertEqual(self.snapshot(), before)
+
+
+class GraphRedrawTests(WriteTest):
+    def setUp(self):
+        super().setUp()
+        topic = self.read("_Main Notes/Service Bus.md")
+        self.write("_Main Notes/Service Bus.md", topic.replace("## Sources", "### Reading order\nQueues first.\n\n## Sources"))
+        self.write("Stubs/Topics.md", note("Topics.", ["Service Bus"], builds_on=["[[Queue]]"]))  # so its graph is stale
+        self.write("_Main Notes/Event Grid.md", note("Done, with nothing to draw.", ["Azure MOC"], type="topic", status="done"))
+        self.write("_Main Notes/Loose.md", note("In no graph.", ["Azure MOC"], type="note"))
+
+    def test_check_writes_nothing(self):
+        before = self.snapshot()
+        out, code = self.run_cli("check")
+        self.assertEqual(code, 0, out)
+        self.assertIn("_Main Notes/Service Bus.md: the learning graph is out of date", out)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_a_write_redraws_only_the_topics_it_touches(self):
+        topics = {rel: self.read(rel) for rel in ("_Main Notes/Service Bus.md", "_Main Notes/Event Grid.md")}
+        out, code = self.run_cli("set", "Loose", "summary=Still in no graph.")
+        self.assertEqual((code, out), (0, "_Main Notes/Loose.md: set summary\n"))
+        self.assertEqual({rel: self.read(rel) for rel in topics}, topics)
+        out, code = self.run_cli("set", "Topics", "summary=Fan-out to subscriptions.")
+        self.assertEqual(code, 0, out)
+        self.assertIn("redrew the learning graph in _Main Notes/Service Bus.md", out)
+        text = self.read("_Main Notes/Service Bus.md")
+        self.assertIn("  - [[Topics]] · stub\n", text)
+        self.assertIn("· left out\n\n### Reading order\nQueues first.\n\n## Sources", text)
+        self.assertEqual(self.read("_Main Notes/Event Grid.md"), topics["_Main Notes/Event Grid.md"])
+
+    def test_mv_redraws_the_order(self):
+        out, _ = self.run_cli("mv", "Sessions", "Batching")
+        self.assertIn("redrew the learning graph", out)
+        self.assertIn("- [[Queue]]\n  - [[Batching]]\n  - [[Peek-lock]]", self.read("_Main Notes/Service Bus.md"))
 
 
 class OpenTests(VaultTest):
