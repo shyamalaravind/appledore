@@ -1,0 +1,17 @@
+schema_version: "1.1"
+name: just-answer-turns-offer-off
+description: >-
+  After "just answer", a question about the subject gets its answer with no offer to file it.
+tags: [file]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  prompt: >-
+    Continue studying HTTP caching. Just answer from now on, don't offer to file anything.
+    Before the next subtopic: can a cache store a 404 Not Found response?
+  max_turns: 40
+  timeout_seconds: 600
+  allowed_tools: [Read, Glob, Grep, Skill, Bash, Write, Edit]
+  append_system_prompt: >-
+    The study vault for this session is the folder `vault` in the current working directory, and
+    the shell sets APPLEDORE_VAULT and PALACE_VAULT to it.

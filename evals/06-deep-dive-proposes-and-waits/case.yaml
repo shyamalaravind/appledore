@@ -1,0 +1,17 @@
+schema_version: "1.1"
+name: deep-dive-proposes-and-waits
+description: >-
+  "deep dive X" on a left-out stub proposes 1 to 4 new nodes, each with a summary and what it
+  builds on, and writes nothing until the user says yes.
+tags: [deep-dive, plan]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  prompt: >-
+    Continue studying HTTP caching: deep dive Shared cache.
+  max_turns: 40
+  timeout_seconds: 600
+  allowed_tools: [Read, Glob, Grep, Skill, Bash, Write, Edit]
+  append_system_prompt: >-
+    The study vault for this session is the folder `vault` in the current working directory, and
+    the shell sets APPLEDORE_VAULT and PALACE_VAULT to it.

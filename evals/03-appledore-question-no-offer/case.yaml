@@ -1,0 +1,18 @@
+schema_version: "1.1"
+name: appledore-question-no-offer
+description: >-
+  A question about appledore itself gets a direct answer and no offer to file it, because only
+  answers about the subject belong in the vault.
+tags: [file, routing]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  prompt: >-
+    Continue studying HTTP caching. Before the next subtopic, a question about appledore itself:
+    where do the answers to my questions end up? Do you keep a separate note for each question?
+  max_turns: 40
+  timeout_seconds: 600
+  allowed_tools: [Read, Glob, Grep, Skill, Bash, Write, Edit]
+  append_system_prompt: >-
+    The study vault for this session is the folder `vault` in the current working directory, and
+    the shell sets APPLEDORE_VAULT and PALACE_VAULT to it.

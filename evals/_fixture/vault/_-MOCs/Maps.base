@@ -1,0 +1,12 @@
+# On Home: every MOC, with its summary and its parent.
+filters:
+  and:
+    - file.inFolder("_-MOCs")
+    - 'file.ext == "md"'
+views:
+  - type: table
+    name: Maps
+    order:
+      - file.name
+      - summary
+      - mocs

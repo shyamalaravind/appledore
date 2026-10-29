@@ -1,0 +1,16 @@
+# On Home: every topic, grouped by status.
+filters:
+  and:
+    - 'type == "topic"'
+    - not:
+        - file.inFolder("__templates")
+views:
+  - type: table
+    name: Topics
+    groupBy:
+      property: note.status
+      direction: ASC
+    order:
+      - file.name
+      - summary
+      - mocs

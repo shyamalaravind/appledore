@@ -1,0 +1,17 @@
+schema_version: "1.1"
+name: plan-asks-in-one-message
+description: >-
+  A topic with no topic note starts the plan: one message asks for the sources, the goal and
+  starting point, and the placement, each with a recommendation, and writes nothing yet.
+tags: [plan]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  prompt: >-
+    Let's study DNS.
+  max_turns: 40
+  timeout_seconds: 600
+  allowed_tools: [Read, Glob, Grep, Skill, Bash, Write, Edit]
+  append_system_prompt: >-
+    The study vault for this session is the folder `vault` in the current working directory, and
+    the shell sets APPLEDORE_VAULT and PALACE_VAULT to it.
