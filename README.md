@@ -152,7 +152,7 @@ Any agent that can read files and run Python can follow [AGENTS.md](AGENTS.md): 
 ### Requirements
 
 - **Python 3.8+,** standard library only.
-- **An Obsidian vault in git,** because wrap-up commits and pushes it, with the core Bases plugin on.
+- **An Obsidian vault that is its own git repository,** with the core Bases plugin on. Wrap-up commits and pushes it, and a vault inside a larger repository would carry that repository's other work along, so `appledore` refuses one.
 - **The vault's path** in `APPLEDORE_VAULT`. `PALACE_VAULT`, its old name, still works until the next version.
 - **The vault's layout.** Today appledore expects the layout in [docs/vault-conventions.md](docs/vault-conventions.md): its folders, properties, templates and invariants, with a copy of that file as the vault's `README.md`. A setup command for a fresh vault is on the roadmap. Until then, `appledore convert` moves legacy inline fields into YAML frontmatter.
 
@@ -170,6 +170,9 @@ There is no index file to fall out of date. Every command reads the notes themse
 | `next <topic> [--left-out]` | the planned subtopics that are ready, the ones waiting, and the stubs left out; `--left-out` lists only those, grouped by the note that left each out |
 | `open <note>` | open a note in Obsidian and print its `obsidian://` link; `APPLEDORE_OPEN=0` only prints the link |
 | `check` | the vault's invariants and each subtopic's shape, run after every write; an error exits 1, a warning doesn't |
+| `review [<note> ...]` | the wrap-up review of the notes changed since the vault's last commit, or of the notes named: errors, warnings on their chains, notes that gained children, likely duplicates, notes outside every chain, and topics with nothing planned |
+| `commit "<message>"` | commit the vault and push it once; it refuses during a merge or rebase, on a detached HEAD and while `check` finds errors, and reports a failed push without retrying it |
+| `brief <subtopic>` | the cold reader's brief: the text of `cold-read.md`, the reader, and the subtopic's notes with line numbers |
 | `mv <note> <new>` | rename or move a note, rewriting every link to it |
 | `convert` | legacy inline fields to YAML frontmatter |
 

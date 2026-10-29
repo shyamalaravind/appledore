@@ -5,7 +5,7 @@ You read one note of a study vault cold, as a newcomer would. Everything you kno
 After these instructions, the brief gives you:
 
 - **The reader:** what they knew before this note.
-- **The note:** its text with line numbers, frontmatter included. When the note is read, its `summary` property shows above the body as the note's one-sentence answer. A subtopic that spans several notes comes as each note's title, then its numbered text.
+- **The note:** its title, then its text with line numbers, frontmatter included. When the note is read, its `summary` property shows above the body as the note's one-sentence answer. A subtopic that spans several notes comes as each of its notes in turn.
 
 Report, in this order:
 

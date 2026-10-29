@@ -15,6 +15,12 @@ Usage: appledore.py [--vault PATH] COMMAND ...
   convert [NOTE ...] [--write]        legacy inline **MOCs**: fields to YAML frontmatter
   mv NOTE NEW [--alias] [--dry-run]   rename or move a note and rewrite every link to it
   open NOTE                           open a note in Obsidian, and print its obsidian:// link
+  review [NOTE ...]                   the wrap-up review of the notes changed since the vault's last
+                                      commit, or of the notes named
+  commit MESSAGE                      commit the vault, case-only renames included, and push it once;
+                                      refuses mid-merge, on a detached HEAD or with check errors
+  brief SUBTOPIC                      the cold reader's brief: cold-read.md, the reader and the
+                                      subtopic's notes, numbered
 
 NOTE is a title, an alias or a path inside the vault. The vault defaults to
 ~/work-space/Solenya/Mind palace; set APPLEDORE_VAULT or pass --vault to use another.
@@ -600,6 +606,41 @@ class Vault:
         draw(None, 0)
         return rows, warnings
 
+    # -- what tree, check, review and brief share
+
+    def outside_chains(self) -> list:
+        """The notes whose first parents never reach a root MOC, so no chain lists them."""
+        out = []
+        for n in self.notes:
+            top = ([n] + self.chain(n))[-1]
+            if n.kind != "root" and not (isinstance(top, Note) and top.kind == "moc" and not top.values("mocs")):
+                out.append(n)
+        return out
+
+    def main_subtopic(self, note: Note) -> Note:
+        """The subtopic whose words a note counts toward: the note itself, or the subtopic above it
+        reached through first parents that are subtopics."""
+        seen, parent = {id(note)}, self._first_parent(note)
+        while isinstance(parent, Note) and parent.kind == "subtopic" and id(parent) not in seen:
+            note = parent
+            seen.add(id(note))
+            parent = self._first_parent(note)
+        return note
+
+    def subtopic_notes(self, main: Note) -> list:
+        """The notes a main subtopic spans: it, then each child subtopic after its first parent, in
+        title order."""
+        group = []
+
+        def collect(n):
+            group.append(n)
+            for c in sorted(self.children(n), key=lambda c: c.title.lower()):
+                if c.kind == "subtopic" and self._first_parent(c) is n and c not in group:
+                    collect(c)
+
+        collect(main)
+        return group
+
 
 # ---------------------------------------------------------------- output helpers
 
@@ -714,8 +755,7 @@ def cmd_tree(vault: Vault, args):
         print(label(root, args.summary or (args.mocs and root.kind in ("moc", "topic"))))
         walk(root, 1, True)
     if not args.moc:
-        loose = [n for n in vault.notes if id(n) not in shown and n.kind != "root"]
-        section("outside every chain", [f"{label(n, False)}  {n.rel}" for n in loose])
+        section("outside every chain", [f"{label(n, False)}  {n.rel}" for n in vault.outside_chains()])
 
 
 def cmd_related(vault: Vault, args):
@@ -844,6 +884,11 @@ def cmd_next(vault: Vault, args):
     section("left out", [f"{label(n)}  (left out by: {vault._first_parent(n).title})" for n in left_out])
 
 
+def embeds_children(note: Note) -> bool:
+    """Whether the note lists its children by embedding Children.base."""
+    return any(link.embed and PurePosixPath(link.name).name.lower() == "children.base" for link in note.body_links())
+
+
 def check(vault: Vault):
     """Return (errors, warnings), each a list of (path, message)."""
     errors, warnings = [], []
@@ -949,8 +994,7 @@ def check(vault: Vault):
             rest = re.split(r"^## Sources\b", n.body, maxsplit=1, flags=re.M)[0]
             if rest.strip():
                 warn(n, "a stub has no body (only an optional ## Sources)")
-        if n.kind in ("topic", "subtopic") and any(
-                link.embed and PurePosixPath(link.name).name.lower() == "children.base" for link in n.body_links()):
+        if n.kind in ("topic", "subtopic") and embeds_children(n):
             listed = "its Learning graph" if n.kind == "topic" else "its Left out list"
             warn(n, f"embeds Children.base, which only a MOC or a type: note needs; {listed} already shows its children")
         if n.kind == "moc":
@@ -968,12 +1012,8 @@ def check(vault: Vault):
         elif len(vault.children(n)) > MOC_SPLIT_AT:
             warn(n, f"{len(vault.children(n))} children: group some under a MOC beside it")
 
-        if n.kind == "subtopic" and not (parents and isinstance(parents[0], Note) and parents[0].kind == "subtopic"):
-            group, stack = [], [n]
-            while stack:
-                node = stack.pop()
-                group.append(node)
-                stack.extend(c for c in vault.children(node) if c.kind == "subtopic" and vault._first_parent(c) is node and c not in group)
+        if n.kind == "subtopic" and vault.main_subtopic(n) is n:
+            group = vault.subtopic_notes(n)
             words = sum(g.words() for g in group)
             low, high = SUBTOPIC_WORDS
             if not low <= words <= high:
@@ -1232,6 +1272,308 @@ def cmd_open(vault: Vault, args):
     print(open_in_obsidian(vault, n))
 
 
+# ---------------------------------------------------------------- the wrap-up and the cold read
+
+MOC_SUGGEST_AT = 5      # a type: note with this many children might be better as a MOC
+DUPLICATE_WORDS = 4     # two summaries sharing at least this many key words,
+DUPLICATE_SHARE = 0.6   # and this share of the shorter one's, likely say the same thing
+STOPWORDS = set("""about after all also and any are been before but can does each for from has have how into its
+more most not one only over such than that the their them then there these they this through two under use used
+uses using was were what when where which while who why will with without would you your""".split())
+STARTING_FROM = re.compile(r"^[ \t]*[-*][ \t]+\*\*Starting from(?::\*\*|\*\*:)[ \t]*(.*)$", re.M)  # a topic's Scope line
+COLD_READ = Path(__file__).resolve().parent.parent / "cold-read.md"
+IN_PROGRESS = (("MERGE_HEAD", "a merge"), ("CHERRY_PICK_HEAD", "a cherry-pick"), ("REVERT_HEAD", "a revert"),
+               ("rebase-merge", "a rebase"), ("rebase-apply", "a rebase"))
+SETTLE = "the user must settle these in git before a commit"
+
+
+def git(vault: Vault, *args, timeout=60):
+    """Run git in the vault with no terminal, so neither git nor ssh can wait for a password, a
+    passphrase or a host key answer: (exit code, stdout, stderr). The exit code is None when git
+    can't start or hangs."""
+    try:
+        done = subprocess.run(["git", "-C", str(vault.root), *args], stdin=subprocess.DEVNULL, capture_output=True,
+                              encoding="utf-8", errors="replace", timeout=timeout, start_new_session=True,
+                              env=dict(os.environ, GIT_TERMINAL_PROMPT="0"))
+    except (OSError, subprocess.SubprocessError) as e:
+        return None, "", str(e)
+    return done.returncode, done.stdout, done.stderr.strip()
+
+
+def git_or_die(vault: Vault, *args) -> str:
+    code, out, err = git(vault, *args)
+    if code != 0:
+        die(f"git {args[0]} failed: {err or 'no output'}")
+    return out
+
+
+def own_repository(vault: Vault, instead: str = ""):
+    """Stop unless the vault is the top folder of its own git repository, so a commit and a push
+    hold only the vault's changes, and git's paths are the vault's."""
+    code, prefix, err = git(vault, "rev-parse", "--show-prefix")
+    if code != 0:
+        die(f"the vault isn't a git repository ({err}){instead}")
+    if prefix.strip():
+        die(f"the vault is the folder {prefix.strip().rstrip('/')!r} inside a larger git repository, and "
+            f"appledore reviews and commits only a vault that is its own repository{instead}")
+
+
+def repository_problems(vault: Vault) -> list:
+    """What only the user can settle before a commit: a note git couldn't merge, which holds conflict
+    markers that add -A would mark resolved; a merge, rebase, cherry-pick or revert in progress, which
+    a commit would conclude; and a detached HEAD, where a commit would land on no branch."""
+    unmerged = {entry.split("\t", 1)[1] for entry in git_or_die(vault, "ls-files", "-u", "-z").split("\0") if "\t" in entry}
+    problems = [f"{rel}: unmerged, with conflict markers to resolve" for rel in sorted(unmerged)]
+    paths = git_or_die(vault, "rev-parse", *[arg for name, _ in IN_PROGRESS for arg in ("--git-path", name)])
+    for (_, what), path in zip(IN_PROGRESS, paths.splitlines()):
+        if (vault.root / path).exists() and f"{what} is in progress" not in problems:
+            problems.append(f"{what} is in progress")
+    if git(vault, "symbolic-ref", "-q", "HEAD")[0] != 0:
+        problems.append("HEAD is detached, so a commit would land on no branch")
+    return problems
+
+
+def session_changes(vault: Vault) -> list:
+    """The vault's paths changed since its last commit, as (git's two status letters, path, what its
+    mocs listed at that commit, resolved in the vault as it is now: None for a parent renamed or
+    deleted since, nothing for a note new since then), so the review sees the MOC a note left and
+    the notes that gained a child."""
+    own_repository(vault, "; name the notes to review instead")
+    fields = git_or_die(vault, "status", "--porcelain", "-z", "--untracked-files=all").split("\0")
+    changes, i = [], 0
+    while i < len(fields):
+        status, path, old = fields[i][:2], fields[i][3:], None
+        i += 1
+        if not path:
+            continue
+        if "R" in status or "C" in status:  # a staged rename or copy is followed by its old path
+            old, i = fields[i], i + 1
+        before = []
+        if status[0] not in "?C" and path.endswith(".md"):
+            code, text, _ = git(vault, "show", f"HEAD:{old or path}")
+            fm_text = split_frontmatter(text)[0] if code == 0 else None
+            mocs = parse_yaml(fm_text).get("mocs") if fm_text else None
+            for value in mocs if isinstance(mocs, list) else [mocs] if mocs else []:
+                before += [vault.resolve(split_inner(m.group(2))[0]) for m in LINK.finditer(value)]
+        changes.append((status, path, [n if isinstance(n, Note) else None for n in before]))
+    return sorted(changes, key=lambda c: c[1].lower())
+
+
+def singular(word: str) -> str:
+    if len(word) > 4 and word.endswith("ies"):
+        return word[:-3] + "y"
+    return word[:-1] if len(word) > 3 and word.endswith("s") and not word.endswith("ss") else word
+
+
+def key_words(text: str) -> set:
+    """A summary's words for comparing it with another: links as their shown text, without short
+    and common words or a plural s."""
+    words = re.findall(r"[a-z0-9]+", fold(WIKI_SHOWN.sub(r"\1", text)))
+    return {singular(w) for w in words if len(w) > 2 and w not in STOPWORDS}
+
+
+def likely_duplicates(vault: Vault, note: Note) -> list:
+    """Other notes that may hold note's concept, as (note, why): the same name or alias, plural or
+    singular, or summaries that share most of their key words."""
+    names = {singular(norm(x)) for x in [note.title] + note.aliases}
+    words, found = key_words(note.summary), []
+    for other in vault.notes:
+        if other is note or other.kind in ("root", "other"):
+            continue
+        if names & {singular(norm(x)) for x in [other.title] + other.aliases}:
+            found.append((other, "the same name"))
+            continue
+        theirs = key_words(other.summary)
+        shared = words & theirs
+        if len(shared) >= max(DUPLICATE_WORDS, DUPLICATE_SHARE * min(len(words), len(theirs))):
+            found.append((other, "summaries share " + ", ".join(sorted(shared))))
+    return found
+
+
+def cmd_review(vault: Vault, args):
+    problems = []
+    if args.notes:
+        changes = [("??", str(vault.get(n).rel), []) for n in args.notes]
+    else:
+        changes = session_changes(vault)
+        problems = repository_problems(vault)
+    section(SETTLE, problems)
+    # git on macOS prints paths precomposed (NFC), which a note's name on disk may not be.
+    by_path = {unicodedata.normalize("NFC", str(n.rel)).lower(): n for n in vault.notes}
+    notes, new, items, grew = [], [], [], {}
+    for status, rel, before in changes:
+        old = [p for p in before if p is not None]
+        for p in old:  # how many more children each note has than at the last commit
+            grew[id(p)] = grew.get(id(p), 0) - 1
+        n = by_path.get(unicodedata.normalize("NFC", rel).lower())
+        if n is None:
+            items.append(f"{rel}  [{'deleted' if not (vault.root / rel).exists() else 'not a note'}]")
+            continue
+        notes.append(n)
+        if status[0] in "?AR":
+            new.append(n)
+        # A parent at the last commit that no longer resolves was renamed or deleted, so the note may
+        # sit under that same parent by a new name: only a parent it had then counts it again.
+        renamed = len(old) < len(before)
+        for p in vault.parents(n):
+            if isinstance(p, Note) and (not renamed or p in old):
+                grew[id(p)] = grew.get(id(p), 0) + 1
+        parent = vault._first_parent(n)
+        chain = [parent] + vault.chain(parent) if isinstance(parent, Note) else []
+        items.append(f"{label(n, False)}  {n.rel}" + (
+            "  under " + " → ".join(c.title if c else "(cycle)" for c in chain) if chain else ""))
+    if not args.notes and not changes:
+        print("nothing changed since the last commit")
+    section("notes to review" if args.notes else "changed since the last commit", items)
+
+    # What the wrap-up reviews: the changed notes, the MOCs and notes above them, and the
+    # MOCs they left.
+    reviewed = {}
+    for n in notes + [p for _, _, before in changes for p in before if p is not None]:
+        for x in [n] + [c for p in vault.parents(n) if isinstance(p, Note) for c in [p] + vault.chain(p)]:
+            if isinstance(x, Note):
+                reviewed.setdefault(id(x), x)
+    reviewed = sorted(reviewed.values(), key=lambda n: str(n.rel).lower())
+    paths = {str(n.rel) for n in reviewed} | {rel for _, rel, _ in changes}
+
+    errors, warnings = check(vault)
+    found = [("errors in the vault: fix each before committing", [f"{rel}: {m}" for rel, m in errors]),
+             ("warnings on these notes and the chains above them",
+              [f"{rel}: {m}" for rel, m in warnings if rel in paths])]
+    # Only a note that gained children since the last commit, so a change the user declined isn't
+    # proposed again at every wrap-up.
+    hubs = [n for n in reviewed if n.kind == "note" and grew.get(id(n), 0) > 0]
+    found.append(("gained children it doesn't list: add ![[Children.base]] at the end of the body, before Sources",
+                  [f"{n.title}  ({len(vault.children(n))} children)" for n in hubs if not embeds_children(n)]))
+    found.append((f"gained children, now {MOC_SUGGEST_AT} or more: maybe better as a MOC",
+                  [f"{n.title}  ({len(vault.children(n))} children)" for n in hubs
+                   if len(vault.children(n)) >= MOC_SUGGEST_AT]))
+    pairs, seen = [], set()
+    for n in new:
+        for other, why in likely_duplicates(vault, n):
+            if frozenset((id(n), id(other))) not in seen:
+                seen.add(frozenset((id(n), id(other))))
+                pairs.append(f"{n.title}  ~  {label(other, False)}: {why}")
+    found.append(("likely duplicates: merge the two if they hold one concept", pairs))
+    found.append(("outside every chain: set mocs so each chain reaches a root MOC",
+                  [f"{label(n, False)}  {n.rel}" for n in vault.outside_chains()]))
+    finished = []
+    for topic in reviewed:
+        if topic.kind == "topic" and topic.fm.get("status") != "done":
+            rows, _ = vault.graph_rows(topic)
+            if not any(n.kind == "stub" and not left for _, n, left in rows):
+                written = sum(1 for _, n, _ in rows if n.kind == "subtopic")
+                left_out = sum(1 for _, _, left in rows if left)
+                finished.append(f"{topic.title}: {written} subtopic{'' if written == 1 else 's'} written, "
+                                f"{left_out} stub{'' if left_out == 1 else 's'} left out")
+    found.append(("topics with nothing planned: ask whether their status becomes done", finished))
+    for title, lines in found:
+        section(title, lines)
+    if not problems and not any(lines for _, lines in found):
+        print("nothing to change")
+
+
+def case_renames(vault: Vault) -> list:
+    """Tracked files whose name on disk now differs only in letter case. A repository that ignores
+    case, as git sets one up on macOS, sees no change there, so a commit would keep the old name."""
+    listings, found = {}, []
+    for rel in filter(None, git_or_die(vault, "ls-files", "-z").split("\0")):
+        folder = vault.root
+        for part in PurePosixPath(rel).parts:
+            if folder not in listings:
+                try:
+                    listings[folder] = {unicodedata.normalize("NFC", x) for x in os.listdir(folder)}
+                except OSError:
+                    listings[folder] = set()
+            if unicodedata.normalize("NFC", part) not in listings[folder]:
+                if (vault.root / rel).exists():  # it is still there under another case, not deleted
+                    found.append(rel)
+                break
+            folder = folder / part
+    return found
+
+
+def cmd_commit(vault: Vault, args):
+    own_repository(vault)
+    problems = repository_problems(vault)
+    if problems:
+        section(SETTLE, problems)
+        die("nothing committed: ask the user to settle these first", 1)
+    errors, _ = check(vault)
+    if errors:
+        for rel, msg in errors:
+            print(f"  {rel}: {msg}")
+        die(f"nothing committed: appledore check found {len(errors)} error(s); fix them first", 1)
+    renamed = case_renames(vault)
+    for rel in renamed:
+        git_or_die(vault, "rm", "--cached", "-q", "--", rel)
+    git_or_die(vault, "add", "-A")
+    staged = [p for p in git_or_die(vault, "diff", "--cached", "--name-only", "-z").split("\0") if p]
+    if staged:
+        code, _, err = git(vault, "commit", "-q", "-m", args.message)
+        if code != 0:
+            die(f"the commit failed, so nothing was pushed: {err}", 1)
+        print(f"committed {len(staged)} file{'' if len(staged) == 1 else 's'}: {args.message}")
+        section("renamed by letter case only", renamed)
+    else:
+        print("nothing to commit")
+
+    code, upstream, _ = git(vault, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
+    if code != 0:
+        remotes = git_or_die(vault, "remote").split()
+        if not remotes:
+            print("not pushed: the vault has no remote")
+            return
+        die(f"not pushed: the branch has no upstream; the user can set one with git push -u {remotes[0]} HEAD", 1)
+    upstream = upstream.strip()
+    ahead = int(git_or_die(vault, "rev-list", "--count", "@{upstream}..HEAD"))
+    if not ahead:
+        print(f"nothing to push: {upstream} has every commit")
+        return
+    # One try only: a push that fails needs the user (a login, a network, a remote that moved on),
+    # and the commit stays in the vault either way.
+    code, _, err = git(vault, "push", "--quiet", timeout=120)
+    if code != 0:
+        die(f"the push to {upstream} failed and was not retried; {ahead} commit(s) wait in the vault: "
+            f"{err or 'no output'}", 1)
+    print(f"pushed {ahead} commit{'' if ahead == 1 else 's'} to {upstream}")
+
+
+def cmd_brief(vault: Vault, args):
+    note = vault.get(args.note)
+    if note.kind != "subtopic":
+        parent = vault._first_parent(note)
+        if note.kind == "stub":  # a stub a subtopic left out is a deep dive, not part of its text
+            why = "it has no text yet, so there is nothing to read cold"
+        elif note.kind == "topic":
+            why = "a cold read reads one subtopic; pass one of its subtopics"
+        elif isinstance(parent, Note) and parent.kind == "subtopic":
+            why = f"a cold read reads one subtopic; pass the subtopic it belongs to: {vault.main_subtopic(parent).title!r}"
+        else:
+            why = "a cold read reads one subtopic"
+        die(f"{note.title!r} is a {note.kind}, not a written subtopic, and {why}")
+    group = vault.subtopic_notes(vault.main_subtopic(note))  # a child's words are read with its whole subtopic
+    topic = next((c for c in vault.chain(group[0]) if isinstance(c, Note) and c.kind == "topic"), None)
+    start = STARTING_FROM.search(topic.body) if topic else None
+    if not start or not start.group(1).strip():
+        die(f"no topic above {group[0].title!r} has a **Starting from:** line, so the brief has no reader; ask the "
+            "user what they knew before this topic, and add it to the topic's Scope as - **Starting from:** …")
+    read = []
+    for n in group:
+        read += [p for p in vault.prerequisites(n) if isinstance(p, Note) and p not in group and p not in read]
+    print(COLD_READ.read_text(encoding="utf-8").strip())
+    print("\n## The reader\n")
+    print("Starting from: " + WIKI_SHOWN.sub(r"\1", start.group(1)).strip())
+    print("\nThe notes they have read:" + ("" if read else " none"))
+    for p in read:
+        print(f"- {p.title}: " + (WIKI_SHOWN.sub(r"\1", p.summary) or "(no summary)"))
+    print("\n## The note")
+    for n in group:
+        print(f"\n### {n.title}\n")
+        for i, line in enumerate(n.text.rstrip("\n").split("\n"), 1):
+            print(f"{i}: {line}")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="appledore.py", description=__doc__.split("\n")[0],
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -1289,6 +1631,18 @@ def main(argv=None):
     p = sub.add_parser("open", help="open a note in Obsidian, and print its obsidian:// link")
     p.add_argument("note")
     p.set_defaults(run=cmd_open)
+
+    p = sub.add_parser("review", help="the wrap-up review of the notes changed since the vault's last commit")
+    p.add_argument("notes", nargs="*", help="review these notes instead of the changed ones")
+    p.set_defaults(run=cmd_review)
+
+    p = sub.add_parser("commit", help="commit the vault, case-only renames included, and push it once")
+    p.add_argument("message")
+    p.set_defaults(run=cmd_commit)
+
+    p = sub.add_parser("brief", help="the cold reader's brief for a subtopic")
+    p.add_argument("note", metavar="subtopic")
+    p.set_defaults(run=cmd_brief)
 
     args = parser.parse_args(argv)
     args.run(Vault(args.vault), args)

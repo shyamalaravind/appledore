@@ -2,6 +2,7 @@
 
 import contextlib
 import io
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -654,6 +655,378 @@ class VaultVariableTests(VaultTest):
         appledore.os.environ["APPLEDORE_VAULT"] = str(self.root)
         appledore.os.environ["PALACE_VAULT"] = str(self.root / "missing")
         self.assertEqual(self.find_queue(), ("_Main Notes/Queue.md  [subtopic]  Queues.\n", ""))
+
+
+class GitVaultTest(VaultTest):
+    """A vault in a temporary git repository, with a local bare repository as its remote. Git reads
+    neither the user's nor the system's config, so the real vault and remotes are never touched."""
+
+    def setUp(self):
+        super().setUp()
+        env = mock.patch.dict(appledore.os.environ, {"GIT_CONFIG_GLOBAL": appledore.os.devnull,
+                                                     "GIT_CONFIG_NOSYSTEM": "1"})
+        env.start()
+        self.addCleanup(env.stop)
+        self.remote = Path(self.tmp.name) / "remote.git"
+        self.git("init", "-q", "--bare", str(self.remote), cwd=self.tmp.name)
+        self.git("symbolic-ref", "HEAD", "refs/heads/main", cwd=self.remote)
+        self.git("init", "-q")
+        self.git("symbolic-ref", "HEAD", "refs/heads/main")
+        self.git("config", "user.name", "Test")
+        self.git("config", "user.email", "test@example.com")
+        self.git("remote", "add", "origin", str(self.remote))
+        self.small_vault()
+        self.run_cli("graph", "Service Bus", "--write")
+        self.commit("Start")
+        self.git("push", "-q", "-u", "origin", "main")
+
+    def git(self, *args, cwd=None, ok=True):
+        done = subprocess.run(["git", *args], cwd=cwd or self.root, capture_output=True, encoding="utf-8")
+        if ok:
+            self.assertEqual(done.returncode, 0, done.stderr)
+        return done.stdout
+
+    def commit(self, message):
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", message)
+
+    def push_elsewhere(self, rel=None, text=""):
+        """Commit on another clone of the remote and push it, as another device would."""
+        other = Path(self.tmp.name) / "other"
+        self.git("clone", "-q", str(self.remote), str(other), cwd=self.tmp.name)
+        if rel:
+            (other / rel).write_text(text, encoding="utf-8")
+        self.git("-c", "user.name=T", "-c", "user.email=t@example.com", "commit", "-q", "-a", "--allow-empty",
+                 "-m", "Elsewhere", cwd=other)
+        self.git("push", "-q", cwd=other)
+
+    def run_both(self, *argv):
+        """Run the command line: (stdout, stderr, exit code)."""
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            out, code = self.run_cli(*argv)
+        return out, err.getvalue(), code
+
+
+class ReviewTests(GitVaultTest):
+    def test_nothing_changed(self):
+        out, _, code = self.run_both("review")
+        self.assertEqual((out, code), ("nothing changed since the last commit\nnothing to change\n", 0))
+
+    def test_the_session_s_notes_and_the_chains_above_them(self):
+        self.write("_-MOCs/Messaging MOC.md", note("Messaging.", ["Azure MOC"]) + "![[Children.base]]\n")
+        for name in ("Event Grid", "Relay"):
+            self.write(f"_Main Notes/{name}.md", note(f"{name}.", ["Messaging MOC"], type="note"))
+        long_summary = " ".join(["word"] * 26)  # a warning on a note no change reaches
+        self.write("_Main Notes/Event Hubs.md", note(long_summary, ["Messaging MOC"], type="note"))
+        self.write("_Main Notes/Compute.md", note("Compute.", ["Azure MOC"], type="note"))
+        self.commit("Messaging")
+        # Only the last commit still lists Relay under its MOC, which is left with two children.
+        (self.root / "_Main Notes/Relay.md").unlink()
+        for name in ("Functions", "Container Apps"):
+            self.write(f"_Main Notes/{name}.md", note(f"{name}.", ["Compute"], type="note"))
+        self.write("Stubs/Queues.md", note("Holds messages until a receiver takes them.", ["Peek-lock"]))
+        self.write("Stubs/Retry policy.md",
+                   note("How a receiver retries a failed message with backoff after each failed delivery.", ["Peek-lock"]))
+        self.write("Stubs/Backoff.md",
+                   note("A receiver retries each failed message delivery with growing backoff.", ["Peek-lock"]))
+        self.write("_Main Notes/Loose.md", note("Nowhere.", type="note"))
+        self.assertIn(("_Main Notes/Event Hubs.md", "summary has 26 words; one sentence of at most 25"),
+                      appledore.check(self.vault())[1])
+        out, _, code = self.run_both("review")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out, textwrap.dedent("""\
+            changed since the last commit:
+              - Container Apps  [note]  _Main Notes/Container Apps.md  under Compute → Azure MOC
+              - Functions  [note]  _Main Notes/Functions.md  under Compute → Azure MOC
+              - Loose  [note]  _Main Notes/Loose.md
+              - _Main Notes/Relay.md  [deleted]
+              - Backoff  [stub]  Stubs/Backoff.md  under Peek-lock → Service Bus → Azure MOC
+              - Queues  [stub]  Stubs/Queues.md  under Peek-lock → Service Bus → Azure MOC
+              - Retry policy  [stub]  Stubs/Retry policy.md  under Peek-lock → Service Bus → Azure MOC
+            errors in the vault: fix each before committing:
+              - _Main Notes/Loose.md: no mocs: every note sits under a parent
+            warnings on these notes and the chains above them:
+              - _-MOCs/Messaging MOC.md: 2 children: dissolve it (point them at its parent)
+              - _Main Notes/Service Bus.md: the learning graph is out of date: run appledore.py graph 'Service Bus' --write
+            gained children it doesn't list: add ![[Children.base]] at the end of the body, before Sources:
+              - Compute  (2 children)
+            likely duplicates: merge the two if they hold one concept:
+              - Backoff  ~  Retry policy  [stub]: summaries share backoff, delivery, failed, message, receiver, retry
+              - Queues  ~  Queue  [subtopic]: the same name
+            outside every chain: set mocs so each chain reaches a root MOC:
+              - Loose  [note]  _Main Notes/Loose.md
+            topics with nothing planned: ask whether their status becomes done:
+              - Service Bus: 3 subtopics written, 4 stubs left out
+            """))
+
+    def test_a_staged_rename_that_leaves_its_moc(self):
+        self.write("_-MOCs/Messaging MOC.md", note("Messaging.", ["Azure MOC"]) + "![[Children.base]]\n")
+        for name in ("Event Grid", "Event Hubs", "Relay"):
+            self.write(f"_Main Notes/{name}.md", note(f"{name}.", ["Messaging MOC"], type="note"))
+        self.commit("Messaging")
+        self.git("mv", "_Main Notes/Relay.md", "Stubs/Relay.md")
+        self.write("Stubs/Relay.md", note("Relay.", ["Peek-lock"]))
+        self.assertEqual(self.git("status", "--short"), 'RM "_Main Notes/Relay.md" -> Stubs/Relay.md\n')
+        out, _, _ = self.run_both("review")
+        self.assertEqual(out, textwrap.dedent("""\
+            changed since the last commit:
+              - Relay  [stub]  Stubs/Relay.md  under Peek-lock → Service Bus → Azure MOC
+            warnings on these notes and the chains above them:
+              - _-MOCs/Messaging MOC.md: 2 children: dissolve it (point them at its parent)
+              - _Main Notes/Service Bus.md: the learning graph is out of date: run appledore.py graph 'Service Bus' --write
+            topics with nothing planned: ask whether their status becomes done:
+              - Service Bus: 3 subtopics written, 2 stubs left out
+            """))
+
+    def test_editing_a_child_proposes_nothing_about_its_parent(self):
+        self.write("_Main Notes/Hub.md", note("A hub.", ["Azure MOC"], type="note"))
+        for i in range(5):
+            self.write(f"_Main Notes/Spoke {i}.md", note(f"Spoke {i}.", ["Hub"], type="note"))
+        self.commit("Hub")
+        self.write("_Main Notes/Spoke 0.md", note("Spoke 0.", ["Hub"], type="note") + "More words.\n")
+        out, _, _ = self.run_both("review")
+        self.assertEqual(out, "changed since the last commit:\n"
+                              "  - Spoke 0  [note]  _Main Notes/Spoke 0.md  under Hub → Azure MOC\n"
+                              "nothing to change\n")
+
+    def test_renaming_a_hub_proposes_nothing_about_it(self):
+        # mv rewrites the children's mocs, so at the last commit they listed a title that is gone.
+        self.write("_Main Notes/Hub.md", note("A hub.", ["Azure MOC"], type="note"))
+        for i in range(5):
+            self.write(f"_Main Notes/Spoke {i}.md", note(f"Spoke {i}.", ["Hub"], type="note"))
+        self.commit("Hub")
+        self.run_cli("mv", "Hub", "Hub services")
+        out, _, _ = self.run_both("review")
+        self.assertNotIn("gained children", out)
+        self.write("_Main Notes/Spoke 5.md", note("Spoke 5.", ["Hub services"], type="note"))
+        out, _, _ = self.run_both("review")
+        self.assertIn("gained children it doesn't list: add ![[Children.base]] at the end of the body, before Sources:\n"
+                      "  - Hub services  (6 children)\n"
+                      "gained children, now 5 or more: maybe better as a MOC:\n"
+                      "  - Hub services  (6 children)\n", out)
+
+    def test_a_decomposed_name(self):
+        name = unicodedata.normalize("NFD", "Café")  # how some tools write é to disk; git prints it composed
+        self.write(f"_Main Notes/{name}.md", note("Coffee.", ["Azure MOC"], type="note"))
+        out, _, _ = self.run_both("review")
+        self.assertIn("  - Café  [note]  _Main Notes/Café.md  under Azure MOC\n", unicodedata.normalize("NFC", out))
+
+    def test_named_notes_without_git(self):
+        shutil.rmtree(self.root / ".git")
+        self.write("_Main Notes/Hub.md", note("A hub.", ["Azure MOC"], type="note") + "![[Children.base]]\n")
+        for i in range(5):
+            self.write(f"_Main Notes/Spoke {i}.md", note(f"Spoke {i}.", ["Hub"], type="note"))
+        out, _, code = self.run_both("review", "Spoke 0")
+        self.assertEqual((out, code), ("notes to review:\n"
+                                       "  - Spoke 0  [note]  _Main Notes/Spoke 0.md  under Hub → Azure MOC\n"
+                                       "gained children, now 5 or more: maybe better as a MOC:\n"
+                                       "  - Hub  (5 children)\n", 0))
+        _, err, code = self.run_both("review")
+        self.assertEqual(code, 2)
+        self.assertIn("the vault isn't a git repository", err)
+
+
+class CommitTests(GitVaultTest):
+    def last(self, where=None):
+        return self.git("log", "-1", "--format=%s", "main", cwd=where).strip()
+
+    def test_commits_and_pushes(self):
+        self.write("Stubs/Ordering.md", note("How are messages kept in order?", ["Queue"]))
+        out, err, code = self.run_both("commit", "Study Service Bus: ordering")
+        self.assertEqual((out, err, code), ("committed 1 file: Study Service Bus: ordering\n"
+                                            "pushed 1 commit to origin/main\n", "", 0))
+        self.assertEqual(self.last(self.remote), "Study Service Bus: ordering")
+        out, _, _ = self.run_both("commit", "Again")
+        self.assertEqual(out, "nothing to commit\nnothing to push: origin/main has every commit\n")
+
+    def test_a_case_only_rename(self):
+        self.run_cli("mv", "Peek-lock", "peek-lock")
+        out, _, code = self.run_both("commit", "Rename")
+        self.assertEqual(code, 0, out)
+        tree = self.git("ls-tree", "-r", "--name-only", "main", cwd=self.remote)
+        self.assertIn("_Main Notes/peek-lock.md\n", tree)
+        self.assertNotIn("Peek-lock.md", tree)
+        if self.git("config", "--bool", "core.ignorecase").strip() == "true":  # macOS and Windows
+            self.assertIn("renamed by letter case only:\n  - _Main Notes/Peek-lock.md\n", out)
+
+    def test_a_failed_push_is_reported_once_and_the_commit_kept(self):
+        self.push_elsewhere()
+        self.write("Stubs/Ordering.md", note("How are messages kept in order?", ["Queue"]))
+        real_run, pushes = subprocess.run, []
+
+        def run(command, **kwargs):
+            pushes.extend(["push"] if "push" in command else [])
+            return real_run(command, **kwargs)
+
+        with mock.patch.object(appledore.subprocess, "run", side_effect=run):
+            out, err, code = self.run_both("commit", "Study Service Bus: ordering")
+        self.assertEqual(code, 1)
+        self.assertEqual(out, "committed 1 file: Study Service Bus: ordering\n")
+        self.assertIn("the push to origin/main failed and was not retried; 1 commit(s) wait in the vault", err)
+        self.assertEqual(pushes, ["push"])
+        self.assertEqual(self.last(), "Study Service Bus: ordering")
+        self.assertEqual(self.last(self.remote), "Elsewhere")
+
+    def test_refuses_while_check_has_errors(self):
+        self.write("_Main Notes/Broken.md", note("b", ["Azure MOC"], type="note") + "See [[Missing]].\n")
+        out, err, code = self.run_both("commit", "Broken")
+        self.assertEqual(code, 1)
+        self.assertIn("_Main Notes/Broken.md: unresolved link [[Missing]] (line 8)", out)
+        self.assertIn("nothing committed: appledore check found 1 error(s)", err)
+        self.assertEqual(self.last(), "Start")
+
+    def test_a_vault_with_no_remote(self):
+        self.git("remote", "remove", "origin")
+        self.write("Stubs/Ordering.md", note("How are messages kept in order?", ["Queue"]))
+        out, _, code = self.run_both("commit", "Local")
+        self.assertEqual((out, code), ("committed 1 file: Local\nnot pushed: the vault has no remote\n", 0))
+
+    def test_a_branch_with_no_upstream(self):
+        self.git("branch", "--unset-upstream")
+        self.write("Stubs/Ordering.md", note("How are messages kept in order?", ["Queue"]))
+        out, err, code = self.run_both("commit", "Local")
+        self.assertEqual((out, code), ("committed 1 file: Local\n", 1))
+        self.assertIn("not pushed: the branch has no upstream; the user can set one with git push -u origin HEAD", err)
+
+    def test_refuses_mid_merge_and_review_says_why_first(self):
+        # A pull from another device stopped on a conflict: committing now would publish its markers.
+        queue = (self.root / "_Main Notes/Queue.md").read_text()
+        self.push_elsewhere("_Main Notes/Queue.md", queue + "Theirs.\n")
+        self.write("_Main Notes/Queue.md", queue + "Mine.\n")
+        self.commit("Mine")
+        self.git("fetch", "-q")
+        self.git("merge", "-q", "origin/main", ok=False)
+        settle = ("the user must settle these in git before a commit:\n"
+                  "  - _Main Notes/Queue.md: unmerged, with conflict markers to resolve\n"
+                  "  - a merge is in progress\n")
+        out, err, code = self.run_both("commit", "Merge")
+        self.assertEqual((out, code), (settle, 1))
+        self.assertIn("nothing committed: ask the user to settle these first", err)
+        self.assertEqual(self.last(), "Mine")
+        self.assertIn("<<<<<<<", (self.root / "_Main Notes/Queue.md").read_text())
+        out, _, _ = self.run_both("review")
+        self.assertTrue(out.startswith(settle + "changed since the last commit:\n"), out)
+
+    def test_refuses_an_operation_in_progress(self):
+        for name, what in appledore.IN_PROGRESS:
+            with self.subTest(name):
+                marker = self.root / self.git("rev-parse", "--git-path", name).strip()
+                marker.mkdir() if name.startswith("rebase") else marker.write_text("0" * 40 + "\n")
+                out, _, code = self.run_both("commit", "Mid-way")
+                self.assertEqual((out, code), (f"the user must settle these in git before a commit:\n"
+                                               f"  - {what} is in progress\n", 1))
+                marker.rmdir() if name.startswith("rebase") else marker.unlink()
+
+    def test_refuses_a_detached_head(self):
+        self.git("checkout", "-q", "--detach")
+        out, _, code = self.run_both("commit", "Nowhere")
+        self.assertEqual((out, code), ("the user must settle these in git before a commit:\n"
+                                       "  - HEAD is detached, so a commit would land on no branch\n", 1))
+
+    def test_refuses_a_vault_inside_a_larger_repository(self):
+        # Its commit would carry whatever else the larger repository has staged.
+        shutil.rmtree(self.root / ".git")
+        outer = self.root.parent
+        self.git("init", "-q", cwd=outer)
+        (outer / "app.py").write_text("print()\n", encoding="utf-8")
+        self.git("add", "app.py", cwd=outer)
+        self.write("Stubs/Ordering.md", note("How are messages kept in order?", ["Queue"]))
+        for command in (("commit", "Study"), ("review",)):
+            _, err, code = self.run_both(*command)
+            self.assertEqual(code, 2)
+            self.assertIn("the vault is the folder 'Mind palace' inside a larger git repository", err)
+        self.assertEqual(self.git("diff", "--cached", "--name-only", cwd=outer), "app.py\n")
+
+
+class BriefTests(VaultTest):
+    def setUp(self):
+        super().setUp()
+        self.small_vault()
+        topic = (self.root / "_Main Notes/Service Bus.md").read_text()
+        self.write("_Main Notes/Service Bus.md", topic.replace(
+            "## Learning graph", "## Scope\n- **Starting from:** knows what a [[Queue|message queue]] is.\n\n## Learning graph"))
+        self.write("_Main Notes/Peek-lock.md", note("Locks.", ["Service Bus"], type="subtopic", builds_on=["[[Queue]]"])
+                   + "**In short:** a lock.\n")
+        self.write("_Main Notes/Lock renewal.md", note("Renewal.", ["Peek-lock"], type="subtopic", builds_on=[])
+                   + "Renew it.\n")
+
+    def brief(self, name):
+        """The brief after cold-read.md's text, which it starts with."""
+        out, code = self.run_cli("brief", name)
+        self.assertEqual(code, 0, out)
+        instructions = appledore.COLD_READ.read_text(encoding="utf-8").strip()
+        self.assertTrue(out.startswith(instructions + "\n"))
+        return out[len(instructions):]
+
+    def test_a_subtopic_with_a_child(self):
+        self.assertEqual(self.brief("Peek-lock"), "\n" + textwrap.dedent("""
+            ## The reader
+
+            Starting from: knows what a message queue is.
+
+            The notes they have read:
+            - Queue: Queues.
+
+            ## The note
+
+            ### Peek-lock
+
+            1: ---
+            2: summary: Locks.
+            3: type: subtopic
+            4: builds_on:
+            5:   - "[[Queue]]"
+            6: mocs:
+            7:   - "[[Service Bus]]"
+            8: created: 2026-10-21
+            9: ---
+            10: **In short:** a lock.
+
+            ### Lock renewal
+
+            1: ---
+            2: summary: Renewal.
+            3: type: subtopic
+            4: builds_on: []
+            5: mocs:
+            6:   - "[[Peek-lock]]"
+            7: created: 2026-10-21
+            8: ---
+            9: Renew it.
+            """))
+
+    def test_a_child_is_read_with_its_whole_subtopic(self):
+        self.assertEqual(self.brief("Lock renewal"), self.brief("Peek-lock"))
+
+    def test_a_single_note_still_names_itself(self):
+        brief = self.brief("Sessions")
+        self.assertIn("The notes they have read:\n- Queue: Queues.\n\n## The note\n\n### Sessions\n\n1: ---\n", brief)
+        self.assertEqual(brief.count("### "), 1)
+
+    def test_refuses_what_isnt_a_written_subtopic(self):
+        self.write("_Main Notes/Lock duration.md", note("How long.", ["Peek-lock"], type="note"))
+        for name, why in (("Service Bus", "'Service Bus' is a topic, not a written subtopic, and a cold read reads "
+                                          "one subtopic; pass one of its subtopics"),
+                          ("AMQP", "'AMQP' is a stub, not a written subtopic, and it has no text yet, so there is "
+                                   "nothing to read cold\n"),  # though a subtopic left it out, it isn't part of it
+                          ("Lock duration", "'Lock duration' is a note, not a written subtopic, and a cold read reads "
+                                            "one subtopic; pass the subtopic it belongs to: 'Peek-lock'")):
+            with self.subTest(name):
+                err = io.StringIO()
+                with contextlib.redirect_stderr(err):
+                    _, code = self.run_cli("brief", name)
+                self.assertEqual(code, 2)
+                self.assertIn(why, err.getvalue())
+
+    def test_a_topic_with_no_starting_from_line(self):
+        self.write("_Main Notes/Service Bus.md", note("A topic.", ["Azure MOC"], type="topic", status="learning"))
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            _, code = self.run_cli("brief", "Queue")
+        self.assertEqual(code, 2)
+        self.assertIn("no topic above 'Queue' has a **Starting from:** line, so the brief has no reader; ask the user "
+                      "what they knew before this topic", err.getvalue())
 
 
 if __name__ == "__main__":
