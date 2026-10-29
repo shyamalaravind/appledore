@@ -167,7 +167,7 @@ There is no index file to fall out of date. Every command reads the notes themse
 | `related <note>` | a note's chain, children, prerequisites and links |
 | `backlinks <note>` | every note that links to it |
 | `graph <topic> [--write]` | the topic's learning graph, drawn from `builds_on` |
-| `next <topic> [--left-out]` | the planned subtopics that are ready, the ones waiting, and the stubs left out; `--left-out` lists only those, grouped by the note that left each out |
+| `next <topic> [--left-out]` | the recommended subtopic (the shallowest ready one, ties in the graph's order), the planned subtopics that are ready, the ones waiting, and the stubs left out; `--left-out` lists only those, grouped by the note that left each out |
 | `open <note>` | open a note in Obsidian and print its `obsidian://` link; `APPLEDORE_OPEN=0` only prints the link |
 | `check` | the vault's invariants and each subtopic's shape, run after every write; an error exits 1, a warning doesn't |
 | `review [<note> ...]` | the wrap-up review of the notes changed since the vault's last commit, or of the notes named: errors, warnings on their chains, notes that gained children, likely duplicates, notes outside every chain, and topics with nothing planned |
@@ -192,9 +192,8 @@ There is no index file to fall out of date. Every command reads the notes themse
 **v0.1.0, in daily use.**
 
 **Next:**
-1. **Planning fixes:** weigh each node against your goal, and read the sources' outlines before whole pages.
-2. **Any vault:** a setup command, with the folder names and the vault path made configurable.
-3. **More agents:** native packages for Codex, Cursor and Gemini CLI.
+1. **Any vault:** a setup command, with the folder names and the vault path made configurable.
+2. **More agents:** native packages for Codex, Cursor and Gemini CLI.
 
 ## References
 

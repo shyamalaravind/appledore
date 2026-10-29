@@ -16,7 +16,7 @@ The layout appledore expects: the folders, properties, templates and invariants 
 10. **There are no tags.** Anything that is or could be a note is a link; facets such as difficulty and status are plain property values.
 11. **Titles are unique, singular, canonical names in sentence case;** product names keep their official spelling. Every other name goes in `aliases`. Search titles, aliases and summaries (⌘P, or `appledore find`) before creating anything.
 12. **Sideways links go in the body, at the first mention,** and the line says what the relation is. There are no Related or See also sections.
-13. **Each note ends with `## Sources`:** links to the pages it was built from. Nothing is pasted, and an AI chat is never a source.
+13. **Each note ends with `## Sources`:** links to the pages it was built from, with "(needs your login)" after a page behind a login. Nothing is pasted, and an AI chat is never a source.
 14. **There are no empty files.** The smallest note is a stub: a `summary` plus `mocs`. Flows are written as text arrows or Mermaid; there are no handwritten drawings.
 15. **An answer filed while learning goes inside one or more topic or subtopic notes.** When it fits none of them, it becomes a new subtopic. There are no question notes.
 16. **DSA problems point through `mocs` to their pattern notes.** A problem's takeaway is its `summary` and its page is its `url`; the statement isn't copied.
