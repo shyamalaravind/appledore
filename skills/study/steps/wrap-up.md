@@ -41,4 +41,4 @@ may need a login or a fix on the remote.
 
 End with one line: what the session added (notes written, answers filed, stubs added) and what's
 ready next. For a finished topic, follow it with the topic's stubs to explore, as
-`appledore next "<topic>" --left-out` prints them, and how to pick one: "deep dive <stub>".
+`appledore next '<topic>' --left-out` prints them, and how to pick one: "deep dive <stub>".

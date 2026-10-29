@@ -28,9 +28,10 @@ Every step follows these. The other files cite them as "study rule N".
    splitting or moving a MOC. Put several changes in one numbered list, so the user can answer
    them in one message ("1 yes, 2 no, 3 call it X"), except an offer to file an answer, which is
    one line (`file` step 3).
-2. **Reuse before writing.** Before you create any note, run `appledore find` on its name, its
-   synonyms and its key words. If a note already covers the concept, link to it instead, because
-   two notes on one idea split everything written about it.
+2. **Reuse before writing.** `appledore new` refuses only a name that is already taken, so before
+   you create a note, run `appledore find` on its synonyms and key words. If a note already covers
+   the concept, link to it instead, because two notes on one idea split everything written about
+   it.
 3. **New concepts.** Link each concept that has a note as `writing-rules.md` rule 4 says. When
    `appledore check` warns that a note you wrote mentions another note but never links it, link
    that mention, unless the words mean something else there. When a concept has no note and no
@@ -53,18 +54,34 @@ Every step follows these. The other files cite them as "study rule N".
    prompt about a page, reads a source for you,** ask it to quote
    word for word, with the URL each quote came from, and to write "not on this page" instead of
    answering from memory, because a paraphrase can hide what came from memory.
-5. **After every write,** run `appledore graph "<topic>" --write` if the learning graph changed,
-   then `appledore check`, and fix every error before you go on. Never edit a Learning graph
-   section by hand: `appledore` draws it from the notes' own `builds_on` and `mocs`, so it can't
-   drift.
-6. **Renames and moves** go through `appledore mv` only, because it rewrites every link to the
-   note. A plain move breaks them. **To merge note B into note A:** fold B's text into A, add B's
-   title to A's `aliases`, rewrite each link that `appledore backlinks "B"` lists so it points at A
-   (a body link becomes `[[A|B]]`), delete B, and run `appledore check`.
+5. **After every write,** run `appledore check`, and fix every error before you go on. Never edit
+   a Learning graph section by hand: `appledore` draws it from the notes' own `builds_on` and
+   `mocs`, so it can't drift. A write command redraws the graphs it touches; when `check` says
+   one is out of date, `appledore graph '<topic>' --write` redraws it.
+6. **`appledore` writes properties and moves files; you write text.** Never edit frontmatter by
+   hand, because hand-written YAML is where quoting and list mistakes come from. `appledore new`
+   creates a note, `promote` turns a stub or a note into another kind, `set` changes properties,
+   `mv` renames or moves a note and `merge` folds one note into another. Each rewrites the links
+   it affects, which a plain move breaks, and refuses a change that would add a `check` error.
+   - **Pass values on standard input,** one `key=value` a line in a quoted heredoc, because
+     inside double quotes the shell runs backticks and expands `$`. Put note names in single
+     quotes, writing an apostrophe as `'\''`. `key+=value` adds to a list, `key-=value` takes out
+     of one, and a key given twice lists both values:
+     ```sh
+     appledore set 'Freshness' - <<'EOF'
+     summary=A stored response is fresh until its `max-age` runs out.
+     aliases+=Freshness lifetime
+     EOF
+     ```
+   - **Before you ask to merge note B into A,** show the user the report lines that
+     `appledore merge 'B' 'A' --dry-run` prints above its diff (what now points at A, what is
+     deleted, what isn't kept), because a merge deletes B. Leave the diff out, because it holds
+     B's text (rule 7). The merge leaves B's summary and text under `## Merged from B` in A, for
+     you to fold in.
 7. **The user reads in Obsidian.** Never paste a note's text into the chat. After a step writes a
-   note for the user to read, open it with `appledore open "<note>"`, and still give the
+   note for the user to read, open it with `appledore open '<note>'`, and still give the
    `obsidian://` link it prints, because a host with no desktop can't open it. When a step writes
-   several notes, open only the one to read first: `APPLEDORE_OPEN=0 appledore open "<note>"`
+   several notes, open only the one to read first: `APPLEDORE_OPEN=0 appledore open '<note>'`
    prints another note's link without opening it.
 8. **Git.** Commit and push the vault only in `wrap-up`. Never touch git history.
 
@@ -86,14 +103,14 @@ Do this once per session, before anything else.
 
 ## Start
 
-- **A topic was named:** run `appledore find "<topic>" --kind topic`.
+- **A topic was named:** run `appledore find '<topic>' --kind topic`.
   - **It exists:** read the topic note. Its Scope says the user's goal and starting point, and its
-    Sources are the agreed sources. Run `appledore next "<topic>"`, tell the user in one line where
+    Sources are the agreed sources. Run `appledore next '<topic>'`, tell the user in one line where
     it stands (how many subtopics are written and how many are planned), then route the rest of
     the message by The loop (`learn` when it only asks to go on). The line goes first, because
     `file` step 3 keeps its offer last.
   - **It doesn't:** use `plan`.
-- **No topic was named:** `appledore find "" --kind topic` lists the topics. Ask the user which one
+- **No topic was named:** `appledore find '' --kind topic` lists the topics. Ask the user which one
   to continue, or what to start.
 
 ## The loop

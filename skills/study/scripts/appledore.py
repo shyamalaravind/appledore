@@ -11,9 +11,16 @@ Usage: appledore.py [--vault PATH] COMMAND ...
   backlinks NOTE                      every note that links to NOTE, and where
   graph TOPIC [--write]               a topic's learning graph, derived from builds_on
   next TOPIC [--left-out]             its planned subtopics: recommended, ready, waiting, left out
-  check                               the vault's invariants; exits 1 on any error
+  check                               the vault's invariants; exits 1 on any error. Reads only
   convert [NOTE ...] [--write]        legacy inline **MOCs**: fields to YAML frontmatter
-  mv NOTE NEW [--alias] [--dry-run]   rename or move a note and rewrite every link to it
+  mv NOTE NEW [--alias]               rename or move a note and rewrite every link to it
+  new KIND TITLE [key=value ...]      create a note from its template in __templates/; KIND is a
+                                      topic, subtopic, note, stub, moc, problem or child (a part
+                                      split off NOTE in mocs=NOTE); refuses a name already taken
+  promote NOTE KIND [key=value ...]   make a stub or a note a topic, subtopic or note: a stub moves
+                                      to _Main Notes/, and one with no text gets the template's parts
+  set NOTE key=value ...              set properties; key+=value adds to a list, key-=value takes out
+  merge NOTE INTO [--force]           fold NOTE into INTO, point every link at INTO, delete NOTE
   open NOTE                           open a note in Obsidian, and print its obsidian:// link
   review [NOTE ...]                   the wrap-up review of the notes changed since the vault's last
                                       commit, or of the notes named
@@ -22,6 +29,16 @@ Usage: appledore.py [--vault PATH] COMMAND ...
                                       -F - reads the message from standard input
   brief SUBTOPIC                      the cold reader's brief: cold-read.md, the reader and the
                                       subtopic's notes, numbered
+
+key=value sets a property: a link property (mocs, builds_on) takes a note's title, alias or path,
+and repeating a key in one call lists several values. An empty value empties a list and removes
+anything else. new also takes source=TEXT, a bullet under ## Sources. A - reads more key=value
+lines from standard input, where the shell expands nothing in a quoted heredoc (<<'EOF').
+
+The write commands (mv, new, promote, set and merge) take --dry-run, which prints the diff and
+writes nothing; graph and convert only read unless given --write. A write command refuses, writing
+nothing, when its result would add a check error, and it redraws the learning graph of each topic
+whose graph holds a note it changed.
 
 NOTE is a title, an alias or a path inside the vault. The vault defaults to
 ~/work-space/Solenya/Mind palace; set APPLEDORE_VAULT or pass --vault to use another.
@@ -34,6 +51,8 @@ standard library only.
 from __future__ import annotations
 
 import argparse
+import collections
+import datetime
 import difflib
 import os
 import re
@@ -51,22 +70,30 @@ NOTES_DIR = "_Main Notes"
 MOCS_DIR = "_-MOCs"
 STUBS_DIR = "Stubs"
 PROBLEMS_DIR = "DSA Problems"
-NOT_NOTES_DIRS = {"__templates", "_attachments", "copilot"}
+TEMPLATES_DIR = "__templates"
+NOT_NOTES_DIRS = {TEMPLATES_DIR, "_attachments", "copilot"}
 ROOT_TITLES = {"home", "readme"}
 
+# Each kind of note: its folder, the template in TEMPLATES_DIR that `new` makes it from, the
+# properties it must have and the statuses it may have.
+Kind = collections.namedtuple("Kind", "folder template required statuses")
+KINDS = {
+    "topic": Kind(NOTES_DIR, "Topic", ("summary", "type", "status", "mocs", "created"), {"learning", "done"}),
+    "subtopic": Kind(NOTES_DIR, "Subtopic", ("summary", "type", "mocs", "builds_on", "created"), set()),
+    "note": Kind(NOTES_DIR, "Note", ("summary", "type", "mocs", "created"), set()),
+    "stub": Kind(STUBS_DIR, "Stub", ("summary", "mocs", "created"), set()),
+    "moc": Kind(MOCS_DIR, "MOC", ("summary", "created"), set()),
+    "problem": Kind(PROBLEMS_DIR, "Problem", ("summary", "url", "difficulty", "status", "mocs", "created"),
+                    {"solved", "revisit"}),
+}
+CHILD_TEMPLATE = "Child"  # Note composer's template for a part split off a note
+
 NOTE_TYPES = ("topic", "subtopic", "note")
-STATUSES = {"topic": {"learning", "done"}, "problem": {"solved", "revisit"}}
+STATUSES = {kind: k.statuses for kind, k in KINDS.items() if k.statuses}
 DIFFICULTIES = {"easy", "medium", "hard"}
 PROP_ORDER = ("summary", "type", "url", "difficulty", "status", "mocs", "builds_on", "aliases", "created")
 KNOWN_PROPS = set(PROP_ORDER) | {"tags", "cssclasses"}
-REQUIRED = {
-    "topic": ("summary", "type", "status", "mocs", "created"),
-    "subtopic": ("summary", "type", "mocs", "builds_on", "created"),
-    "note": ("summary", "type", "mocs", "created"),
-    "stub": ("summary", "mocs", "created"),
-    "moc": ("summary", "created"),
-    "problem": ("summary", "url", "difficulty", "status", "mocs", "created"),
-}
+REQUIRED = {kind: k.required for kind, k in KINDS.items()}
 MAX_PARENTS = 2
 MAX_PREREQUISITES = 3
 MOC_DISSOLVE_AT = 2   # a MOC with this many children or fewer is dissolved
@@ -307,11 +334,11 @@ class Link:
 # ---------------------------------------------------------------- the vault
 
 class Note:
-    def __init__(self, root: Path, path: Path):
+    def __init__(self, root: Path, path: Path, text: str = None):
         self.path = path
         self.rel = PurePosixPath(path.relative_to(root).as_posix())
         self.title = path.stem
-        self.text = path.read_text(encoding="utf-8").lstrip("﻿")
+        self.text = (path.read_text(encoding="utf-8") if text is None else text).lstrip("﻿")
         fm_text, self.body = split_frontmatter(self.text)
         self.has_frontmatter = fm_text is not None
         self.fm = parse_yaml(fm_text) if fm_text else {}
@@ -383,19 +410,32 @@ class Note:
 
 
 class Vault:
-    def __init__(self, root):
+    def __init__(self, root, planned=None):
+        """planned maps a path inside the vault to the text a write command will give it, or to None
+        for a file it removes, so the vault can be checked as the command would leave it."""
         self.root = Path(root).expanduser().resolve()
         if not self.root.is_dir():
             die(f"no vault at {self.root}")
         self.notes, self.files = [], {}
+        planned = dict(planned or {})
+
+        def add(rel, text=None):
+            path = self.root / rel
+            self.files.setdefault(path.name.lower(), []).append(rel)
+            if rel.endswith(".md") and rel.split("/")[0] not in NOT_NOTES_DIRS:
+                self.notes.append(Note(self.root, path, text))
+
         for dirpath, dirnames, filenames in os.walk(self.root):
             dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
             for name in sorted(filenames):
-                path = Path(dirpath) / name
-                rel = path.relative_to(self.root).as_posix()
-                self.files.setdefault(name.lower(), []).append(rel)
-                if name.endswith(".md") and rel.split("/")[0] not in NOT_NOTES_DIRS:
-                    self.notes.append(Note(self.root, path))
+                rel = (Path(dirpath) / name).relative_to(self.root).as_posix()
+                if rel not in planned:
+                    add(rel)
+                elif planned[rel] is not None:
+                    add(rel, planned.pop(rel))
+        for rel, text in planned.items():
+            if text is not None:
+                add(rel, text)
         self.notes.sort(key=lambda n: (len(n.rel.parts), str(n.rel).lower()))
         self.by_title, self.by_rel = {}, {}
         for n in self.notes:
@@ -669,14 +709,23 @@ def section(title, items):
             print(f"  - {item}")
 
 
-def graph_section(text: str):
-    """(start, end) of the Learning graph section's content, or None."""
-    m = re.search(r"^## Learning graph[ \t]*$", text, re.M)
+def find_section(text: str, title: str, ends_at=2):
+    """(heading start, content start, end) of the first `## <title>` section outside code and
+    comments, or None. It ends at the next heading of level ends_at or above."""
+    masked = mask(text)
+    m = re.search(rf"^## {re.escape(title)}\b.*$", masked, re.M)
     if not m:
         return None
-    start = m.end() + 1 if m.end() < len(text) else m.end()
-    nxt = re.compile(r"^#{1,2}[ \t]", re.M).search(text, start)
-    return start, (nxt.start() if nxt else len(text))
+    start = min(m.end() + 1, len(text))
+    nxt = re.compile(rf"^#{{1,{ends_at}}}[ \t]", re.M).search(masked, start)
+    return m.start(), start, nxt.start() if nxt else len(text)
+
+
+def graph_section(text: str):
+    """(start, end) of the Learning graph section's content, or None. It ends at the next heading of
+    any level, so the text under a ### heading below the graph is never redrawn away."""
+    bounds = find_section(text, "Learning graph", 6)
+    return bounds[1:] if bounds else None
 
 
 def drawn_graph(text: str) -> list:
@@ -822,19 +871,24 @@ def cmd_graph(vault: Vault, args):
         print("\n".join(lines) if lines else "(no subtopics or stubs yet)")
         return
     text = topic.text
-    bounds = graph_section(text)
-    block = GRAPH_COMMENT + "\n" + "".join(line + "\n" for line in lines) + "\n"
-    if bounds:
-        new = text[:bounds[0]] + block + text[bounds[1]:]
-    else:
-        m = re.search(r"^## Sources\b", text, re.M)
-        at = m.start() if m else len(text)
-        new = text[:at].rstrip("\n") + "\n\n## Learning graph\n" + block + text[at:]
+    new = with_graph(text, lines)
     if new != text:
-        topic.path.write_text(new, encoding="utf-8")
+        write_note(topic.path, new)
         print(f"updated the learning graph in {topic.rel} ({len(lines)} lines)")
     else:
         print(f"the learning graph in {topic.rel} is already current")
+
+
+def with_graph(text: str, lines: list) -> str:
+    """A topic note's text with its Learning graph section drawn as lines, the section added before
+    Sources when there is none."""
+    bounds = graph_section(text)
+    block = GRAPH_COMMENT + "\n" + "".join(line + "\n" for line in lines) + "\n"
+    if bounds:
+        return text[:bounds[0]] + block + text[bounds[1]:]
+    sources = find_section(text, "Sources")
+    at = sources[0] if sources else len(text)
+    return text[:at].rstrip("\n") + "\n\n## Learning graph\n" + block + text[at:]
 
 
 def print_left_out(vault: Vault, topic: Note, rows):
@@ -998,6 +1052,10 @@ def check(vault: Vault):
             rest = re.split(r"^## Sources\b", n.body, maxsplit=1, flags=re.M)[0]
             if rest.strip():
                 warn(n, "a stub has no body (only an optional ## Sources)")
+        merged = MERGED_HEADING.search(mask(n.body))
+        if merged:
+            warn(n, f"{merged.group().strip()!r} still holds text appledore merge moved in: "
+                    "fold it into the note and delete that heading")
         if n.kind in ("topic", "subtopic") and embeds_children(n):
             listed = "its Learning graph" if n.kind == "topic" else "its Left out list"
             warn(n, f"embeds Children.base, which only a MOC or a type: note needs; {listed} already shows its children")
@@ -1137,9 +1195,13 @@ def convert_text(text: str):
 
     body = "\n".join(lines).strip("\n")
     if sources:
-        m = re.search(r"^## Sources[ \t]*$", body, re.M)
+        bounds = find_section(body, "Sources")
         bullets = "".join(f"- {s}\n" for s in sources)
-        body = (body[:m.end()] + "\n" + bullets.rstrip("\n") + body[m.end():]) if m else (body + "\n\n## Sources\n" + bullets).lstrip("\n")
+        if bounds:
+            at = bounds[1]
+            body = body[:at] + ("" if body[:at].endswith("\n") else "\n") + bullets + body[at:]
+        else:
+            body = (body + "\n\n## Sources\n" + bullets).lstrip("\n")
     return with_frontmatter(new, body)
 
 
@@ -1152,7 +1214,7 @@ def cmd_convert(vault: Vault, args):
             continue
         changed += 1
         if args.write:
-            n.path.write_text(new, encoding="utf-8")
+            write_note(n.path, new)
             print(f"converted {n.rel}")
         else:
             sys.stdout.writelines(difflib.unified_diff(
@@ -1161,62 +1223,623 @@ def cmd_convert(vault: Vault, args):
     print(f"{changed} note(s) {'converted' if args.write else 'to convert (dry run; add --write)'}")
 
 
-def rewrite_links(vault: Vault, text: str, target: Note, new_name: str):
-    """Point every link to target at new_name, keeping headings and display text. Returns (text, count)."""
+def rewrite_links(vault: Vault, text: str, target: Note, new_name: str, paths_only=False, keep_shown=False):
+    """Point every link to target at new_name, keeping headings and display text, and a pipe escaped
+    in a table row, where a bare one would split the cell. Returns (text, count). With paths_only,
+    only the links that name target by its path change, as a move to another folder needs. With
+    keep_shown, as a merge needs, a body link that showed target's name keeps showing it, as
+    [[new|old]], and a property link becomes a plain [[new]]."""
+    body_start = len(text) - len(split_frontmatter(text)[1])
     out, last, count = [], 0, 0
     for m in LINK.finditer(mask(text)):
-        name, heading, display = split_inner(text[m.start(2):m.end(2)])
-        if vault.resolve(name) is not target:
+        inner = text[m.start(2):m.end(2)]
+        name, heading, display = split_inner(inner)
+        if vault.resolve(name) is not target or (paths_only and "/" not in name):
             continue
-        inner = new_name + ("#" + heading if heading is not None else "") + ("|" + display if display is not None else "")
-        out += [text[last:m.start(2)], inner]
+        if keep_shown and m.start() < body_start:
+            heading = display = None
+        elif keep_shown and display is None and not m.group(1):  # an embed shows the note, not its name
+            shown = re.sub(r"\.md$", "", name.rsplit("/", 1)[-1])
+            display = shown if shown != new_name else None
+        row = text[text.rfind("\n", 0, m.start()) + 1:m.start()].lstrip().startswith("|")
+        bar = "\\|" if row or "\\|" in inner else "|"
+        new = new_name + ("#" + heading if heading is not None else "") + (bar + display if display is not None else "")
+        out += [text[last:m.start(2)], new]
         last, count = m.end(2), count + 1
     return "".join(out) + text[last:], count
 
 
 def cmd_mv(vault: Vault, args):
     note = vault.get(args.note)
-    dest = args.new.strip().lstrip("/")
+    new_rel = move_target(vault, note, args.new)
+    if note.kind == "stub" and new_rel.parts[0] == NOTES_DIR:
+        die(f"a stub becomes a written note with appledore promote '{note.title}' topic, subtopic or note, "
+            f"which also gives it the type every note in {NOTES_DIR}/ needs")
+    new_title = new_rel.stem
+    changes, links, counts = Changes(vault), 0, []
+    for n in vault.notes:
+        text, count = rewrite_links(vault, n.text, note, new_title)
+        if n is note:
+            if args.alias and new_title != note.title:
+                aliases = as_list(parse_yaml(split_frontmatter(text)[0] or "").get("aliases"))
+                if note.title.lower() not in (a.lower() for a in aliases):
+                    text = set_frontmatter(text, {"aliases": aliases + [note.title]})
+            changes.move(note.rel, new_rel, text)
+        elif count:
+            changes.write(n.rel, text)
+        if count:
+            links += count
+            counts.append(f"  {n.rel}: {count}")
+    finish(changes, args.dry_run,
+           [f"moved {note.rel} → {new_rel}; {links} link(s) in {len(counts)} note(s)"] + counts)
+
+
+# ---------------------------------------------------------------- vault writes
+
+LIST_PROPS = ("mocs", "builds_on", "aliases", "tags", "cssclasses")
+LINK_PROPS = ("mocs", "builds_on")
+ASSIGNMENT = re.compile(r"^([A-Za-z_]\w*)([+-]?)=(.*)$", re.S)
+SOURCE_ASSIGNMENT = re.compile(r"^source\+?=")
+PLACEHOLDER = re.compile(r"\{\{[ \t]*(\w+)(?::([^{}]*))?[ \t]*\}\}")  # Obsidian's {{date:YYYY-MM-DD}}
+MOMENT = {"YYYY": "%Y", "YY": "%y", "MM": "%m", "DD": "%d", "HH": "%H", "mm": "%M", "ss": "%S"}
+MERGED_HEADING = re.compile(r"^## Merged from\b.*$", re.M)
+LINE_NUMBER = re.compile(r"\bline \d+\b")
+DELETE = object()
+ASSIGN_HELP = ("key=value sets a property, and a key repeated in one call lists several values. A link "
+               "property (mocs, builds_on) takes a note's title, alias or path. key+=value adds to a list "
+               "and key-=value takes out of one. An empty value empties a list and removes anything else. "
+               "A - reads more key=value lines from standard input: pass free text in a quoted heredoc "
+               "(<<'EOF'), because the shell expands $ and backticks inside double quotes.")
+
+
+def now():
+    """The time a new note is made at."""
+    return datetime.datetime.now()
+
+
+def as_list(value) -> list:
+    return [v for v in (value if isinstance(value, list) else [value]) if v]
+
+
+def fill_template(text: str, title: str, when, values=None) -> str:
+    """A template with Obsidian's {{title}}, {{date}} and {{time}} filled in, in the format a
+    placeholder gives, each name in values filled from it (Note composer's {{fromTitle}}), and any
+    other placeholder, such as {{content}}, left empty. A date format with a token MOMENT lacks is
+    refused, so a note never gets a date half filled in."""
+    values = {k.lower(): v for k, v in (values or {}).items()}
+
+    def fill(m):
+        name, fmt = m.group(1).lower(), m.group(2)
+        if name == "title":
+            return title
+        if name in values:
+            return values[name]
+        if name not in ("date", "time"):
+            return ""
+        fmt = (fmt or ("YYYY-MM-DD" if name == "date" else "HH:mm")).strip()
+        unknown = [t for t in re.findall(r"([A-Za-z])(\1*)", fmt) if t[0] + t[1] not in MOMENT]
+        if unknown or "[" in fmt:
+            die(f"the template's {m.group()} uses a token appledore can't fill; it fills {' '.join(MOMENT)}")
+        return when.strftime(re.sub(r"([A-Za-z])\1*", lambda t: MOMENT[t.group()], fmt.replace("%", "%%")))
+    return PLACEHOLDER.sub(fill, text)
+
+
+def template(vault: Vault, name: str) -> str:
+    """The vault's own template, so the templates stay the one source of each kind's shape."""
+    path = vault.root / TEMPLATES_DIR / f"{name}.md"
+    if not path.is_file():
+        die(f"no {TEMPLATES_DIR}/{path.name}: appledore makes this kind of note from it")
+    return path.read_text(encoding="utf-8").lstrip("﻿")
+
+
+def set_frontmatter(text: str, changes: dict) -> str:
+    """The text with each property in changes set to its value, or removed when it is DELETE. Only
+    those properties' lines change, so the rest stays as Obsidian wrote it, including lines appledore
+    can't parse, such as a property whose name has a space; a new property goes where PROP_ORDER
+    puts it."""
+    fm_text, body = split_frontmatter(text)
+    blocks = []  # [key, lines]: a property's line and the indented lines under it, or [None, [line]]
+    for line in fm_text.split("\n") if fm_text else []:
+        m = FM_KEY.match(line)
+        if m:
+            blocks.append([m.group(1), [line]])
+        elif line[:1] in (" ", "\t") and blocks:
+            blocks[-1][1].append(line)
+        else:
+            blocks.append([None, [line]])
+
+    def rank(key):
+        return PROP_ORDER.index(key) if key in PROP_ORDER else len(PROP_ORDER)
+
+    for key, value in changes.items():
+        at = next((i for i, b in enumerate(blocks) if b[0] == key), None)
+        if value is DELETE:
+            if at is not None:
+                del blocks[at]
+            continue
+        lines = dump_yaml({key: value}).split("\n")
+        if at is not None:
+            blocks[at][1] = lines
+            continue
+        keyed = [i for i, b in enumerate(blocks) if b[0] is not None]
+        before = [i for i in keyed if rank(blocks[i][0]) <= rank(key)]
+        blocks.insert(before[-1] + 1 if before else keyed[0] if keyed else len(blocks), [key, lines])
+    return "---\n" + "\n".join(line for _, lines in blocks for line in lines) + "\n---\n" + body
+
+
+def link_name(value: str) -> str:
+    """The note a property value or an argument names: [[X|shown]] and X both name X."""
+    m = LINK.search(value)
+    return split_inner(m.group(2))[0] if m else value.strip()
+
+
+def read_assignments(args: list) -> list:
+    """The key=value arguments, with a - replaced by the lines on standard input, one key=value a line.
+    Standard input is read as UTF-8, which a heredoc sends, whatever encoding the platform gives a
+    pipe; a - that reads no line is refused, because a forgotten heredoc would look like success."""
+    out = []
+    for a in args:
+        if a != "-":
+            out.append(a)
+            continue
+        try:
+            text = sys.stdin.buffer.read().decode("utf-8-sig")
+        except UnicodeDecodeError:
+            die("standard input isn't UTF-8")
+        lines = [line for line in text.split("\n") if line.strip()]
+        if not lines:
+            die("- read no key=value line from standard input; pass them in a heredoc: - <<'EOF'")
+        out += lines
+    return out
+
+
+def assign(vault: Vault, data: dict, assignments: list, title: str) -> dict:
+    """The property changes that key=value, key+=value and key-=value make to data. A link property
+    takes a note's title, alias or path, and stores a link to its title. Whether the result breaks a
+    rule is check's to say: every write command runs it before writing."""
+    changes, replaced = {}, set()
+    for a in assignments:
+        m = ASSIGNMENT.match(a)
+        if not m:
+            die(f"{a!r} isn't key=value, key+=value or key-=value")
+        key, op, value = m.group(1), m.group(2), m.group(3).strip()
+        if key == "source":
+            die("source= adds a source only to a new note; edit an existing note's ## Sources section")
+        if key not in KNOWN_PROPS:
+            die(f"unknown property {key!r}; the vault's are {', '.join(PROP_ORDER)}")
+        if key not in LIST_PROPS:
+            if op:
+                die(f"{key} holds one value: use {key}=")
+            changes[key] = value if value else DELETE
+            continue
+        current = changes.get(key, data.get(key))
+        items = [] if current in (None, DELETE) else as_list(current)
+        if not op and key not in replaced:  # the first key= in a call replaces the list, the next ones add
+            items = []
+            replaced.add(key)
+        if not value:
+            if op:
+                die(f"{key}{op}= needs a value")
+            changes[key] = items
+            continue
+        if key in LINK_PROPS:
+            target = vault.get(link_name(value))
+            value = f"[[{target.title}]]"
+
+            def same(v):
+                return vault.resolve(link_name(v)) is target
+        else:
+            def same(v):
+                return norm_name(v) == norm_name(value)
+        if op == "-":
+            if not any(same(v) for v in items):
+                die(f"{value!r} isn't in {key}")
+            items = [v for v in items if not same(v)]
+        elif not any(same(v) for v in items) and not (key == "aliases" and norm_name(value) == norm_name(title)):
+            items.append(value)
+        changes[key] = items
+    return changes
+
+
+def norm_name(name: str) -> str:
+    """A name as the duplicate check compares it: in one Unicode form, because a disk can store é as
+    e plus an accent, ignoring case, and with spaces, hyphens and underscores alike."""
+    return re.sub(r"[\s_-]+", " ", unicodedata.normalize("NFC", name).lower()).strip()
+
+
+def same_name(vault: Vault, name: str) -> list:
+    """The notes whose title or an alias is name, as norm_name compares them."""
+    key = norm_name(name)
+    return [n for n in vault.notes if key in (norm_name(x) for x in [n.title] + n.aliases)]
+
+
+def close_names(vault: Vault, name: str) -> list:
+    """The notes whose title or an alias is spelt nearly like name: the duplicates a new note risks."""
+    names = {}
+    for n in vault.notes:
+        if n.kind != "root":
+            for x in [n.title] + n.aliases:
+                names.setdefault(norm_name(x), n)
+    hits = difflib.get_close_matches(norm_name(name), list(names), n=5, cutoff=0.8)
+    return list(dict.fromkeys(names[h] for h in hits))
+
+
+def check_title(title: str):
+    """Refuse a title that Obsidian can't link to, or hides because it starts with a dot."""
+    if BAD_TITLE_CHARS & set(title) or not title.strip():
+        die(f"a title can't hold any of {' '.join(sorted(BAD_TITLE_CHARS))}; put the real form in aliases")
+    if title.startswith("."):
+        die("a title can't start with a dot, because Obsidian hides that file; put the real form in aliases")
+
+
+def move_target(vault: Vault, note: Note, dest: str) -> PurePosixPath:
+    """Where a note goes for `mv NOTE DEST`: a new title, a path, or a folder ending in /. Refused when
+    the title can't be used, another note has it, or another file is there, so a move never
+    replaces a file."""
+    dest = dest.strip().lstrip("/")
     if dest.endswith("/"):
         new_rel = PurePosixPath(dest) / note.rel.name
     elif "/" in dest:
         new_rel = PurePosixPath(dest if dest.endswith(".md") else dest + ".md")
     else:
         new_rel = note.rel.parent / (dest if dest.endswith(".md") else dest + ".md")
-    new_title = new_rel.stem
-    if BAD_TITLE_CHARS & set(new_title) or not new_title.strip():
-        die(f"a title can't hold any of {' '.join(sorted(BAD_TITLE_CHARS))}; put the real form in aliases")
-    clash = vault.by_title.get(new_title.lower(), [])
-    if any(n is not note for n in clash):
-        die(f"{new_title!r} already exists: {clash[0].rel}")
+    check_title(new_rel.stem)
+    key = unicodedata.normalize("NFC", new_rel.stem).lower()
+    clash = [n for n in vault.notes if n is not note and unicodedata.normalize("NFC", n.title).lower() == key]
+    if clash:
+        die(f"{new_rel.stem!r} already exists: {clash[0].rel}")
     if new_rel == note.rel:
         die("that is where it already is")
-
-    edits = []
-    for n in vault.notes:
-        text, count = rewrite_links(vault, n.text, note, new_title)
-        if n is note and args.alias and new_title != note.title:
-            fm_text, body = split_frontmatter(text)
-            data = parse_yaml(fm_text) if fm_text else {}
-            aliases = [a for a in (data.get("aliases") or []) if a]
-            if note.title.lower() not in (a.lower() for a in aliases):
-                data["aliases"] = aliases + [note.title]
-            text = with_frontmatter(data, body)
-        if text != n.text:
-            edits.append((n, text, count))
-    links = sum(c for _, _, c in edits)
-    print(f"{'would move' if args.dry_run else 'moved'} {note.rel} → {new_rel}; "
-          f"{links} link(s) in {sum(1 for e in edits if e[2])} note(s)")
-    for n, _, count in edits:
-        if count:
-            print(f"  {n.rel}: {count}")
-    if args.dry_run:
-        return
-    for n, text, _ in edits:
-        n.path.write_text(text, encoding="utf-8")
     target = vault.root / new_rel
-    target.parent.mkdir(parents=True, exist_ok=True)
-    os.rename(note.path, target)  # a case-only rename works on case-insensitive disks too
+    if target.exists() and not os.path.samefile(target, note.path):  # a case-only rename is the same file
+        die(f"{new_rel} already exists")
+    return new_rel
+
+
+def source_items(text: str):
+    """(the text without its Sources section, the section's items). An item is a line and the
+    indented lines under it, so a nested line stays with its source."""
+    bounds = find_section(text, "Sources")
+    if not bounds:
+        return text, []
+    items = []
+    for line in text[bounds[1]:bounds[2]].split("\n"):
+        if line.strip() in ("", "-"):
+            continue
+        if line[:1] in (" ", "\t") and items:
+            items[-1] += "\n" + line.rstrip()
+        else:
+            items.append(line.rstrip())
+    return text[:bounds[0]] + text[bounds[2]:], items
+
+
+def add_sources(text: str, items: list) -> str:
+    """The text with each item under its ## Sources section, in place of a template's empty bullet,
+    leaving out an item the section already has. A note without the section gets one at the end."""
+    if not items:
+        return text
+    text = text if text.endswith("\n") else text + "\n"
+    bounds = find_section(text, "Sources")
+    if not bounds:
+        _, body = split_frontmatter(text)
+        return text.rstrip("\n") + "\n" + ("\n" if body.strip() else "") + "## Sources\n" + "\n".join(items) + "\n"
+    _, kept = source_items(text)
+    seen, lines = set(), []
+    for item in kept + items:
+        if " ".join(item.split()) not in seen:
+            seen.add(" ".join(item.split()))
+            lines.append(item)
+    start, end = bounds[1], bounds[2]
+    return text[:start] + "\n".join(lines) + "\n" + ("\n" if end < len(text) else "") + text[end:]
+
+
+def write_note(path: Path, text: str, create=False):
+    """Write a file whole. A new one is made only when no file has its name, so nothing is ever
+    overwritten; an existing one gets a finished copy swapped in, so a crash or a sync client never
+    meets half a note."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if create:
+        try:
+            with open(path, "x", encoding="utf-8") as f:
+                f.write(text)
+        except FileExistsError:
+            die(f"a file named like {path.name} is already in {path.parent.name}/; nothing was overwritten")
+        return
+    tmp = path.with_name(f".{path.name}.appledore")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
+
+
+class Changes:
+    """The files one write command changes, gathered before any is written. Every write command goes
+    through finish(), so each is checked the same way before it writes, has the same dry run, a
+    diff, and swaps each file in whole."""
+
+    def __init__(self, vault: Vault):
+        self.vault = vault
+        self.texts = {}  # path inside the vault -> its new text, or None for a file that goes
+        self.moves = {}  # new path -> old path
+        self.carried = {}  # a merged note's path -> the note its text, and so its errors, now sit in
+
+    def write(self, rel, text):
+        self.texts[str(rel)] = text
+
+    def move(self, old, new, text):
+        self.texts[str(old)], self.texts[str(new)] = None, text
+        self.moves[str(new)] = str(old)
+
+    def delete(self, rel):
+        self.texts[str(rel)] = None
+
+    def after(self) -> Vault:
+        return Vault(self.vault.root, self.texts)
+
+    def original(self, rel) -> str:
+        note = self.vault.by_rel.get(rel.lower())
+        return note.text if note else ""
+
+    def diff(self):
+        for rel in sorted(self.texts, key=str.lower):
+            text, old = self.texts[rel], self.moves.get(rel, rel)
+            if text is None:
+                if rel not in self.moves.values():
+                    print(f"delete {rel}")
+                continue
+            if old != rel:
+                print(f"move {old} → {rel}")
+            before = self.original(old)
+            for line in difflib.unified_diff(before.splitlines(True), text.splitlines(True),
+                                             f"a/{old}" if before else "/dev/null", f"b/{rel}"):
+                sys.stdout.write(line if line.endswith("\n") else line + "\n")
+
+    def apply(self):
+        root = self.vault.root
+        created = [rel for rel, text in self.texts.items()
+                   if text is not None and rel not in self.moves and self.vault.by_rel.get(rel.lower()) is None]
+        for rel in created:  # first, so a name already on disk stops the command before anything else
+            write_note(root / rel, self.texts[rel], create=True)
+        for new, old in self.moves.items():
+            (root / new).parent.mkdir(parents=True, exist_ok=True)
+            os.rename(root / old, root / new)  # a case-only rename works on case-insensitive disks too
+        for rel, text in self.texts.items():
+            if text is not None and rel not in created:
+                write_note(root / rel, text)
+        for rel, text in self.texts.items():
+            if text is None and rel not in self.moves.values():
+                (root / rel).unlink()
+
+
+def redraw_touched(changes: Changes, after: Vault) -> list:
+    """Redraw the Learning graph of each topic whose graph holds a note the changes touch, before or
+    after them, when it no longer matches; a topic with nothing to draw gets no section. Every other
+    topic is left as it is. Returns the paths of the topics redrawn."""
+    touched = {PurePosixPath(rel).stem.lower() for rel in changes.texts}
+
+    def members(vault):
+        return {t.title.lower(): {n.title.lower() for _, n, _ in vault.graph_rows(t)[0]} | {t.title.lower()}
+                for t in vault.notes if t.kind == "topic"}
+
+    before, now_ = members(changes.vault), members(after)
+    redrawn = []
+    for topic in after.notes:
+        if topic.kind != "topic" or not touched & (before.get(topic.title.lower(), set()) | now_[topic.title.lower()]):
+            continue
+        lines, _ = after.learning_graph(topic)
+        if drawn_graph(topic.text) != lines and (lines or graph_section(topic.text)):
+            changes.write(topic.rel, with_graph(topic.text, lines))
+            redrawn.append(str(topic.rel))
+    return redrawn
+
+
+def finish(changes: Changes, dry_run: bool, report: list):
+    """Check the vault as the changes would leave it, redraw the learning graphs they touch, then
+    write them all, or with dry_run print them as a diff. A command whose result would add a check
+    error is refused whole, so no write command leaves the vault with an error it didn't have."""
+    after = changes.after()
+    redrawn = redraw_touched(changes, after)
+    if redrawn:
+        after = changes.after()
+    # Errors are matched per note and without their line numbers, so an error a note already had
+    # still counts as old after the write moves it to another line.
+    moved = {old.lower(): new.lower() for new, old in changes.moves.items()}
+    moved.update((old.lower(), into.lower()) for old, into in changes.carried.items())
+
+    def key(rel, msg):
+        return moved.get(rel.lower(), rel.lower()), LINE_NUMBER.sub("", msg)
+
+    old = collections.Counter(key(rel, msg) for rel, msg in check(changes.vault)[0])
+    added = []
+    for rel, msg in check(after)[0]:
+        if old[key(rel, msg)]:
+            old[key(rel, msg)] -= 1
+        else:
+            added.append((rel, msg))
+    if added:
+        die("refused, so nothing was written: it would leave these check errors:\n"
+            + "\n".join(f"  {rel}: {msg}" for rel, msg in added))
+    report = report + [f"redrew the learning graph in {rel}" for rel in redrawn]
+    if dry_run:
+        print("dry run, so nothing was written:")
+        print("\n".join(report))
+        changes.diff()
+        return
+    changes.apply()
+    print("\n".join(report))
+
+
+def cmd_new(vault: Vault, args):
+    title = unicodedata.normalize("NFC", args.title.strip())  # Obsidian keys its files by NFC names
+    title = title[:-3] if title.lower().endswith(".md") else title
+    check_title(title)
+    if args.kind == "moc" and not title.endswith(" MOC"):
+        die("a MOC's title ends in ' MOC'")
+    for n in same_name(vault, title):
+        what = "a note" if norm_name(n.title) == norm_name(title) else "an alias of a note"
+        die(f"{title!r} is already {what}: {n.rel}  [{n.kind}]  {n.summary}\n"
+            "Link that note instead, or give this one a name of its own.")
+    assignments = read_assignments(args.assignments)
+    sources = [s if s.startswith("- ") else "- " + s
+               for s in (a.split("=", 1)[1].strip() for a in assignments if SOURCE_ASSIGNMENT.match(a)) if s]
+    assignments = [a for a in assignments if not SOURCE_ASSIGNMENT.match(a)]
+    if any(re.match(r"type[+-]?=", a) for a in assignments):
+        die(f"the kind sets the type: appledore new {args.kind} …")
+    values, parent = {}, None
+    if args.kind == "child":
+        parents = [a.split("=", 1)[1] for a in assignments if re.match(r"mocs\+?=", a)]
+        if not parents:
+            die("a child needs the note it is part of: mocs=<that note>")
+        parent = vault.get(link_name(parents[0]))
+        values["fromTitle"] = parent.title
+    folder, name = (NOTES_DIR, CHILD_TEMPLATE) if args.kind == "child" else KINDS[args.kind][:2]
+    text = fill_template(template(vault, name), title, now(), values)
+    fm_text, _ = split_frontmatter(text)
+    data = parse_yaml(fm_text) if fm_text else {}
+    changes = assign(vault, data, assignments, title)
+    planned = parent is not None and parent.kind == "stub" and any(
+        isinstance(p, Note) and p.kind == "topic" for p in vault.parents(parent))  # a subtopic still being written
+    if parent is not None and (parent.kind == "subtopic" or planned):
+        # The part of a subtopic is a subtopic, with no prerequisites of its own (the vault's README).
+        changes["type"] = "subtopic"
+        changes.setdefault("builds_on", as_list(data.get("builds_on")))
+    if not {**data, **changes}.get("created"):
+        changes["created"] = now().date().isoformat()
+    rel = f"{folder}/{title}.md"
+    plan = Changes(vault)
+    plan.write(rel, add_sources(set_frontmatter(text, changes), sources))
+    report = [f"created {rel}"]
+    close = close_names(vault, title)
+    if close:
+        report.append("names already close to it: " + ", ".join(f"{n.title} ({n.rel})" for n in close)
+                      + "; if one is the same concept, merge them with appledore merge")
+    finish(plan, args.dry_run, report)
+
+
+def cmd_promote(vault: Vault, args):
+    note = vault.get(args.note)
+    if note.kind not in ("stub",) + NOTE_TYPES:
+        die(f"{note.title!r} is a {note.kind}; only a stub or a note in {NOTES_DIR}/ becomes a {args.kind}")
+    t_fm, t_body = split_frontmatter(fill_template(template(vault, KINDS[args.kind].template), note.title, now()))
+    t_data = parse_yaml(t_fm) if t_fm else {}
+    # The template adds the properties a kind has and sets its type; the note keeps its own values.
+    changes = {k: v for k, v in t_data.items() if k == "type" or (k not in note.fm and v is not None)}
+    changes.update(assign(vault, {**note.fm, **changes}, read_assignments(args.assignments), note.title))
+    rest, sources = source_items(note.body)
+    if note.kind == "stub" and not rest.strip():  # a stub holds only its Sources, so it takes the template's parts
+        fm_text = split_frontmatter(note.text)[0]
+        text = add_sources(("---\n" + fm_text + "\n---\n" if fm_text else "") + t_body, sources)
+    else:
+        text = note.text
+    text = set_frontmatter(text, changes)
+    plan = Changes(vault)
+    if note.folder == NOTES_DIR:
+        plan.write(note.rel, text)
+        report = [f"{note.rel}: now a {args.kind}"]
+    else:
+        new_rel = move_target(vault, note, NOTES_DIR + "/")
+        for n in vault.notes:
+            if n is not note:
+                new, count = rewrite_links(vault, n.text, note, note.title, paths_only=True)
+                if count:
+                    plan.write(n.rel, new)
+        plan.move(note.rel, new_rel, text)
+        report = [f"{note.rel} → {new_rel}: now a {args.kind}"]
+    finish(plan, args.dry_run, report)
+
+
+def cmd_set(vault: Vault, args):
+    note = vault.get(args.note)
+    changes = assign(vault, note.fm, read_assignments(args.assignments), note.title)
+    if "type" in changes and note.folder != NOTES_DIR:
+        die(f"only a note in {NOTES_DIR}/ has a type; appledore promote makes a stub a written note")
+    text = set_frontmatter(note.text, changes)
+    if text == note.text:
+        print(f"{note.rel}: already set")
+        return
+    plan = Changes(vault)
+    plan.write(note.rel, text)
+    finish(plan, args.dry_run, [f"{note.rel}: set {', '.join(changes)}"])
+
+
+def tidy_link_props(vault: Vault, text: str, me: Note) -> str:
+    """The text with each link property listing a note once, and never the note itself."""
+    fm_text, _ = split_frontmatter(text)
+    data = parse_yaml(fm_text) if fm_text else {}
+    changes = {}
+    for key in LINK_PROPS:
+        values = data.get(key)
+        if not isinstance(values, list):
+            continue
+        kept, seen = [], set()
+        for v in values:
+            target = vault.resolve(link_name(v))
+            ident = id(target) if target is not None else link_name(v).lower()
+            if target is not me and ident not in seen:
+                seen.add(ident)
+                kept.append(v)
+        if kept != values:
+            changes[key] = kept
+    return set_frontmatter(text, changes) if changes else text
+
+
+def cmd_merge(vault: Vault, args):
+    old, into = vault.get(args.note), vault.get(args.into)
+    if old is into:
+        die("a note can't merge into itself")
+    if not args.force:
+        if old.kind in ("moc", "topic"):
+            die(f"{old.title!r} is a {old.kind}, so merging it would take apart its "
+                f"{'chain' if old.kind == 'moc' else 'learning graph'}; pass --force if the user wants that")
+        if into.kind == "stub" and old.kind != "stub":
+            die(f"{into.title!r} is a stub and {old.title!r} is a written {old.kind}: merge the stub into the "
+                "written note instead, by swapping the two, or pass --force")
+    if vault.parents(into) == [old]:
+        die(f"{into.title!r} sits only under {old.title!r}, so the merge would leave it with no parent; "
+            "give it another first, with appledore set")
+    plan, links = Changes(vault), 0
+    for n in vault.notes:
+        if n is not old:
+            text, count = rewrite_links(vault, n.text, old, into.title, keep_shown=True)
+            if count:
+                plan.write(n.rel, tidy_link_props(vault, text, n))
+                links += count
+    linked = len(plan.texts)
+    text = plan.texts.get(str(into.rel), into.text)
+    # into takes old's names as aliases and its prerequisites, and keeps its own place.
+    data = parse_yaml(split_frontmatter(text)[0] or "")
+    aliases, prereqs = as_list(data.get("aliases")), as_list(data.get("builds_on"))
+    changes = {"aliases": list(aliases), "builds_on": list(prereqs)}
+    for name in [old.title] + old.aliases:
+        if norm_name(name) not in [norm_name(a) for a in changes["aliases"]] + [norm_name(into.title)]:
+            changes["aliases"].append(name)
+    known = {id(vault.resolve(link_name(p))) for p in prereqs} | {id(into)} | {id(p) for p in vault.parents(into)}
+    for target in vault.prerequisites(old):
+        if isinstance(target, Note) and id(target) not in known:
+            known.add(id(target))
+            changes["builds_on"].append(f"[[{target.title}]]")
+    text = set_frontmatter(text, {k: v for k, v in changes.items() if v != (aliases if k == "aliases" else prereqs)})
+    # old's summary and text land under a heading of their own, and its sources under into's, so
+    # nothing is lost.
+    rest, sources = source_items(split_frontmatter(rewrite_links(vault, old.text, old, into.title, keep_shown=True)[0])[1])
+    parts = ([f"Summary: {old.summary}"] if old.summary else []) + ([rest.strip()] if rest.strip() else [])
+    if parts:
+        block = f"## Merged from {old.title}\n" + "\n\n".join(parts) + "\n"
+        bounds = find_section(text, "Sources")
+        text = (text[:bounds[0]].rstrip("\n") + "\n\n" + block + "\n" + text[bounds[0]:] if bounds
+                else text.rstrip("\n") + "\n\n" + block)
+    plan.write(into.rel, add_sources(text, sources))
+    plan.delete(old.rel)
+    plan.carried[str(old.rel)] = str(into.rel)
+    own = {id(p) for p in vault.parents(into)}
+    lost = [f"{key}: {', '.join(old.values(key))}" for key in old.fm
+            if key not in ("summary", "aliases", "builds_on") and old.values(key)
+            and not (key == "mocs" and all(id(p) in own for p in vault.parents(old)))]
+    report = [f"merged {old.rel} into {into.rel}: {links} link(s) in {linked} note(s) now point at "
+              f"{into.title!r}, which takes {old.title!r} as an alias; {old.rel} is deleted"]
+    if parts:
+        report.append(f"its summary and text sit under '## Merged from {old.title}' in {into.rel}: fold them in")
+    if lost:
+        report.append(f"not kept from {old.title!r}: " + "; ".join(lost))
+    finish(plan, args.dry_run, report)
 
 
 def try_run(command, timeout=15):
@@ -1671,8 +2294,39 @@ def main(argv=None):
     p.add_argument("note")
     p.add_argument("new", help="a new title, a path like 'Stubs/Dapr', or a folder ending in /")
     p.add_argument("--alias", action="store_true", help="keep the old title as an alias")
-    p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--dry-run", action="store_true", help="print the diff and write nothing")
     p.set_defaults(run=cmd_mv)
+
+    p = sub.add_parser("new", help="create a note from its template; refuses a name that is already taken",
+                       epilog=ASSIGN_HELP + " source=TEXT adds TEXT as a bullet under ## Sources.")
+    p.add_argument("kind", choices=list(KINDS) + ["child"],
+                   help="child is a part split off the note in mocs=, from the Child template")
+    p.add_argument("title")
+    p.add_argument("assignments", nargs="*", metavar="key=value",
+                   help="its properties, such as summary=... mocs=..., and source=TEXT for each source")
+    p.add_argument("--dry-run", action="store_true", help="print the diff and write nothing")
+    p.set_defaults(run=cmd_new)
+
+    p = sub.add_parser("promote", help="make a stub or a note a topic, subtopic or note", epilog=ASSIGN_HELP)
+    p.add_argument("note")
+    p.add_argument("kind", choices=NOTE_TYPES)
+    p.add_argument("assignments", nargs="*", metavar="key=value")
+    p.add_argument("--dry-run", action="store_true", help="print the diff and write nothing")
+    p.set_defaults(run=cmd_promote)
+
+    p = sub.add_parser("set", help="set a note's properties", epilog=ASSIGN_HELP)
+    p.add_argument("note")
+    p.add_argument("assignments", nargs="+", metavar="key=value")
+    p.add_argument("--dry-run", action="store_true", help="print the diff and write nothing")
+    p.set_defaults(run=cmd_set)
+
+    p = sub.add_parser("merge", help="fold NOTE into INTO, pointing every link at INTO, and delete NOTE")
+    p.add_argument("note")
+    p.add_argument("into")
+    p.add_argument("--dry-run", action="store_true", help="print the diff and write nothing")
+    p.add_argument("--force", action="store_true",
+                   help="merge a MOC or a topic, or a written note into a stub, which merge otherwise refuses")
+    p.set_defaults(run=cmd_merge)
 
     p = sub.add_parser("open", help="open a note in Obsidian, and print its obsidian:// link")
     p.add_argument("note")
@@ -1692,7 +2346,12 @@ def main(argv=None):
     p.add_argument("note", metavar="subtopic")
     p.set_defaults(run=cmd_brief)
 
-    args = parser.parse_args(argv)
+    # argparse leaves a key=value after an option such as --dry-run unparsed, so collect it here.
+    args, extra = parser.parse_known_args(argv)
+    if extra and not (hasattr(args, "assignments") and all(ASSIGNMENT.match(a) or a == "-" for a in extra)):
+        parser.error("unrecognized arguments: " + " ".join(extra))
+    if extra:
+        args.assignments += extra
     args.run(Vault(args.vault), args)
 
 

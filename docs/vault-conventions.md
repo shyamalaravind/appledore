@@ -47,6 +47,8 @@ Lists stay lists even with one value, and links in properties are quoted: `- "[[
 - **New stub:** click the missing link (new notes land in `Stubs/`), insert the `Stub` template and write the summary.
 - **Promote a stub:** move it to `_Main Notes/`, then insert the `Topic`, `Subtopic` or `Note` template.
 
+`appledore new` and `appledore promote` fill in these same templates, so a change to a template reaches the notes the agent creates too. Keep them plain notes. appledore fills `{{title}}`, `{{date}}` and `{{time}}`, with a format made of `YYYY`, `YY`, `MM`, `DD`, `HH`, `mm` and `ss` only, refuses any other format, and leaves every other placeholder empty.
+
 ## Invariants
 
 `appledore check` checks these; Obsidian's own orphan and unresolved-link views cover the first two.
