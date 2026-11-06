@@ -11,10 +11,16 @@ then writes one sitting at a time:
 
 ## 1. Look in the vault
 
-- `appledore find '<topic>'`, then its synonyms and key words, then the same with `--body`.
+- One `appledore find` with the topic, its synonyms and its key words, each its own argument: it
+  prints each matching note once, with its title, kind and the start of its summary. Then the
+  same call with `--body`, for only the searches it lists after `no matches:`, because a body
+  search prints every name match again. `appledore find '<title>'` gives one note's whole summary.
 - `appledore tree --mocs` for the MOC chains: the MOCs and topics with their summaries, and the
-  notes directly under a MOC, which is all placement needs. Then `appledore related` on the two or
-  three likeliest parents.
+  notes directly under a MOC. Then `appledore related` on the two or three likeliest parents.
+  These stay their own calls, because placement needs the MOC chains, and both print titles and
+  summaries, never a note's text.
+- Read a note's own text only when its summary leaves open whether it covers part of the topic,
+  because everything read here stays in your context for the whole session.
 
 Note what the vault already has: notes on the topic or its parts, and where the topic could sit.
 
@@ -24,7 +30,10 @@ Ask in one message, with your recommendation for each, so the user can reply "al
 
 1. **Sources:** 2–5 pages, courses or books, with official sources first: the standard or the
    vendor's own documentation, listed ahead of explainers and tutorials. Include any the user has
-   named.
+   named. For documentation published per version, name the version you recommend: the latest
+   stable release you know of, unless the goal needs another. Propose them without fetching or
+   checking any yet, because the user may swap a source or pick another version, which throws that
+   work away. Step 3 checks the version, then the pages they agree to.
 2. **Goal and starting point:** what the topic is for (an interview, work, curiosity), which sets
    how deep to go, and what the user already knows, which sets what the notes may take for
    granted. Propose as known only what the vault's notes show (step 1), and ask about the rest,
@@ -35,11 +44,18 @@ Ask in one message, with your recommendation for each, so the user can reply "al
 
 ## 3. Propose the learning graph
 
-1. **Read the outlines,** the sources' contents pages and overview sections, not whole pages, so
+1. **Check the version first,** for documentation published per version, before any other read,
+   because step 2's version came from memory, and outlines read for the wrong version are read
+   again. Save and read the documentation's own list of versions, as study rule 4 says for any page.
+   - **It lists a stable release newer than the agreed one:** switch to it, and say so in one line,
+     because the user agreed to the latest stable release.
+   - **Step 2 recommended an older release for the goal, or the documentation lists no
+     versions:** keep the agreed one.
+2. **Read the outlines,** the sources' contents pages and overview sections, not whole pages, so
    the graph follows how the material is built. Say first what you're reading ("Reading the
    outlines of 4 sources"), because a long read in silence looks stuck.
-2. **Check that each source's text is really there,** as `SKILL.md`'s Gotchas say, and tell the
-   user what a thin one can back.
+3. **Check that each source's text is really there,** as `SKILL.md`'s Gotchas say, once per
+   page, on the copy you saved under study rule 4, and tell the user what a thin one can back.
 
 Then propose:
 
@@ -62,7 +78,9 @@ Then propose:
   getting a second note beside it: it is rewritten to `writing-rules.md`, keeps its name and links, and its
   `mocs` moves to the topic. Mark each one.
 
-Ask the user to change, add or cut nodes, and revise until they agree.
+Ask the user to change, add or cut nodes, and revise until they agree. In the first proposal, if
+Set up's effort line went out, end it with: "Switch to effort `high` before your yes (`/effort`,
+`high`, `s`): the writing starts on your yes."
 
 ## 4. Write the plan into the vault
 
@@ -78,21 +96,28 @@ values as study rule 6 says:
    - **Scope:** `Goal:`, `Starting from:`, `In:` and `Out:`, one line each.
    - **Sources:** the `source` lines, each a link with its title, followed by "(needs your
      login)" for a page behind a login.
-3. **One stub per planned subtopic,** prerequisites first, since `new` refuses a link to a missing
-   note: `appledore new stub '<title>'`, with a `summary` saying what it will teach, `mocs` the
-   topic, and a `builds_on` for each prerequisite (a planned stub or a known note). The
-   `builds_on` is what lets `appledore next` tell which subtopic is ready. A shallow node's deeper
-   parts get stubs too, at most four, each with `mocs` that node's stub and no `builds_on`, so the
-   graph draws them as left out under it.
-4. **Each take-over** now: `appledore promote '<note>' subtopic`, with `mocs` the topic and its
-   planned `builds_on`, then `learn`'s steps 2–4, starting from the note's own content and the
-   sources.
-5. `appledore check`.
+3. **One stub per planned subtopic, and a mark on each take-over,** all in one shell call
+   joined with `&&`, so the first refusal stops the rest, prerequisites first, since `new`
+   refuses a link to a missing note. A stub: `appledore new stub '<title>'`, with a `summary`
+   saying what it will teach, `mocs` the topic, and a `builds_on` for each prerequisite (a planned
+   stub or a known note). The `builds_on` is what lets `appledore next` tell which subtopic is
+   ready. A shallow node's deeper parts get stubs too, at most four, each with `mocs` that node's
+   stub and no `builds_on`, so the graph draws them as left out under it. A take-over:
+   `appledore promote '<note>' subtopic`, with `mocs` the topic, its planned `builds_on` and
+   `status=planned`, which puts it in the graph unwritten; `learn` rewrites it when "next"
+   reaches it.
+4. `appledore check`.
 
 ## 5. Hand back
 
-Give the user the topic note's link and the graph as `appledore graph '<topic>'` prints it, then
-use `learn` for the subtopic `appledore next '<topic>'` recommends.
+Use `learn` for the node `appledore next '<topic>'` recommends, a stub or a take-over, and hand
+it to the user with its step 6, with the topic note's link and the graph as
+`appledore graph '<topic>'` prints it. Write nothing else: each other take-over is rewritten when
+"next" reaches it, like any note, because the user's yes to the plan isn't a "next".
+
+Done when every planned subtopic has its stub, every take-over is marked `planned`,
+`appledore check` shows no error, and the user has the first note, or its question, and the
+graph.
 
 ## Deep dive
 

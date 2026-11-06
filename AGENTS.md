@@ -14,3 +14,5 @@ When the user says "let's study X", "continue studying X" or anything like it, r
 The README's [repo table](README.md#the-repo) says what each folder holds. Run the tests with `python3 -m unittest discover -s tests`.
 
 Keep the skill portable: its frontmatter holds only `name` and `description`, and an instruction says "ask the user", never the name of a tool only one host has, because other hosts reject other fields and lack that tool.
+
+`skills/study/handover-card.md` restates `steps/learn.md` and `writing-rules.md` for a session that takes over another. Change it in the same commit as either file; the tests fail when it misses a step or a rule.
