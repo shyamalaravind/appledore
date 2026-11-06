@@ -45,7 +45,8 @@ Start it with `/appledore:study <topic>`, then talk to it:
 | You say | What happens |
 |---|---|
 | *(a new topic)* | **plan:** it looks through your vault for what you already know, asks for 2–5 sources, your goal and where the topic belongs, and proposes a learning graph for you to edit. Then it writes the topic note and one stub per planned subtopic. |
-| `next` | **learn:** it writes the next subtopic whose prerequisites are done, opens it in Obsidian and gives you its `obsidian://` link. After the last one, it lists every stub the topic left out, for your next deep dive. |
+| `write the next 3 while I read` | **learn, write ahead:** a background helper writes them while you read, opens none, and gives you their links. `next` then opens each in turn. |
+| `next` | **learn:** it opens the next note written ahead, if one is unopened, or writes the next subtopic whose prerequisites are done, opens it in Obsidian and gives you its `obsidian://` link. After the last one, it lists every stub the topic left out, for your next deep dive. |
 | a question about the subject | **file:** it answers from the agreed sources, then offers in one line to file the answer: inside one or more existing notes, or as a new subtopic. When the vault already answers it, you get that note's link instead. `just answer` turns the offer off. |
 | a question about the session, the plan, the vault or appledore | It answers directly, and files nothing. |
 | `deep dive <node>` | **plan, deep dive:** that node, or a topic a note left out, grows its own subtopics in the graph. |
@@ -160,16 +161,17 @@ There is no index file to fall out of date. Every command reads the notes themse
 
 | Command | What it does |
 |---|---|
-| `find <words>` | notes whose title, aliases or summary match, the duplicate check before anything is created |
+| `find <words> …` | notes whose title, aliases or summary match, the duplicate check before anything is created; with several searches, each note prints once with the start of its summary, and the misses after `no matches:` |
 | `tree [--mocs]` | the MOC chains, from the root MOCs down; `--mocs` keeps only the MOCs and topics, with their summaries, and the notes directly under a MOC |
 | `related <note>` | a note's chain, children, prerequisites and links |
 | `backlinks <note>` | every note that links to it |
 | `graph <topic> [--write]` | the topic's learning graph, drawn from `builds_on` |
-| `next <topic> [--left-out]` | the recommended subtopic (the shallowest ready one, ties in the graph's order), the planned subtopics that are ready, the ones waiting, and the stubs left out; `--left-out` lists only those, grouped by the note that left each out |
+| `next <topic> [--left-out]` | the recommended node: a note written ahead and not opened yet, a take-over waiting for its rewrite, or the shallowest ready stub, ties in the graph's order; then the notes `unopened:`, the planned subtopics that are ready, the ones waiting, and the stubs left out; `--left-out` lists only those, grouped by the note that left each out; `write next:` names the node to write when the recommended one is already written |
 | `open <note>` | open a note in Obsidian and print its `obsidian://` link; `APPLEDORE_OPEN=0` only prints the link |
 | `check` | the vault's invariants and each subtopic's shape, run after every write; an error exits 1, a warning doesn't. It only reads |
 | `review [<note> ...]` | the wrap-up review of the notes changed since the vault's last commit, or of the notes named: errors, warnings on their chains, notes that gained children, likely duplicates, notes outside every chain, and topics with nothing planned |
 | `commit -F -` | commit the vault with the message read from standard input, list every file it took, and push it once; it refuses during a merge or rebase, on a detached HEAD and while `check` finds errors, and reports a failed push without retrying it |
+| `card` | the handover card, then the vault README's rules section word for word |
 | `brief <subtopic>` | the cold reader's brief: the text of `cold-read.md`, the reader, and the subtopic's notes with line numbers |
 | `mv <note> <new>` | rename or move a note, rewriting every link to it |
 | `new <kind> <title> key=value …` | create a topic, subtopic, note, stub, MOC or child (a part split off another note) from the vault's own template, with its properties filled in; it refuses a name that is already a title or an alias |
@@ -184,7 +186,7 @@ The write commands (`mv`, `new`, `promote`, `set` and `merge`) take `--dry-run`,
 
 | Path | What it is |
 |---|---|
-| [`skills/study/`](skills/study) | The one skill. `SKILL.md` is the loop and its rules, `steps/` holds its four steps (`plan`, which also runs deep dives, `learn`, `file` and `wrap-up`), `writing-rules.md` the 15 writing rules, and `cold-read.md` the cold reader's brief. |
+| [`skills/study/`](skills/study) | The one skill. `SKILL.md` is the loop and its rules, `steps/` holds its four steps (`plan`, which also runs deep dives, `learn`, `file` and `wrap-up`), `writing-rules.md` the 15 writing rules, `cold-read.md` the cold reader's brief, `handover-card.md` the rules card a handover carries, and `sources.md` how to save a source page. |
 | [`skills/study/scripts/appledore.py`](skills/study/scripts/appledore.py) | The vault's index and checks. |
 | [`agents/`](agents) | Claude Code only: the tool-less `cold-reader`. |
 | [`.claude-plugin/`](.claude-plugin) | The plugin manifest and its marketplace. |

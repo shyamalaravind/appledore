@@ -2,6 +2,7 @@
 
 import contextlib
 import io
+import re
 import shutil
 import subprocess
 import sys
@@ -1516,6 +1517,132 @@ class BriefTests(VaultTest):
         self.assertEqual(code, 2)
         self.assertIn("no topic above 'Queue' has a **Starting from:** line, so the brief has no reader; ask the user "
                       "what they knew before this topic", err.getvalue())
+
+
+class FindSeveralTests(VaultTest):
+    def test_several_searches_print_each_note_once(self):
+        self.small_vault()
+        out, code = self.run_cli("find", "queue", "Queue", "nothing-like-this")
+        self.assertEqual(code, 0)
+        self.assertEqual(sum(line.startswith("Queue  [") for line in out.splitlines()), 1)
+        self.assertIn("no matches: nothing-like-this", out)
+
+    def test_every_search_missing_lists_them(self):
+        self.small_vault()
+        out, _ = self.run_cli("find", "zzz", "yyy")
+        self.assertEqual(out.strip(), "no matches: zzz, yyy")
+
+    def test_a_search_after_an_option(self):
+        self.small_vault()
+        out, code = self.run_cli("find", "Queue", "--kind", "subtopic", "Sessions")
+        self.assertEqual(code, 0)
+        self.assertIn("Queue  [subtopic]", out)
+        self.assertIn("Sessions  [subtopic]", out)
+
+
+class UnopenedTests(WriteTest):
+    def test_next_recommends_the_unopened_note_and_lists_it(self):
+        self.write("_Main Notes/Peek-lock.md", note("Locks.", ["Service Bus"], type="subtopic", status="unopened",
+                                                     builds_on=["[[Queue]]"]) + shaped(400))
+        self.write("Stubs/Dead letters.md", note("Dead letters.", ["Service Bus"], builds_on=["[[Peek-lock]]"]))
+        out, code = self.run_cli("next", "Service Bus")
+        self.assertEqual(code, 0)
+        self.assertIn("recommended: Peek-lock  (unopened)", out)
+        self.assertIn("write next: Dead letters", out)  # the shallowest ready stub, for a helper writing ahead
+        self.assertIn("unopened:\n  - Peek-lock", out)
+        self.assertIn("(1 unopened)", out)
+
+    def test_set_marks_a_note_written_ahead_once_filed(self):
+        self.write("Stubs/Dead letters.md", note("Dead letters.", ["Service Bus"], builds_on=["[[Queue]]"])
+                   + "## Sources\n- x\n")
+        self.write("Stubs/Dead letters.md", (self.root / "Stubs/Dead letters.md").read_text().replace(
+            "## Sources", shaped(300) + "\n## Sources"))
+        out, code = self.run_cli("promote", "Dead letters", "subtopic", "summary=Where failed messages go.")
+        self.assertEqual(code, 0, out)
+        out, code = self.run_cli("set", "Dead letters", "status=unopened")
+        self.assertEqual(code, 0, out)
+        out, _ = self.run_cli("next", "Service Bus")
+        self.assertIn("unopened:\n  - Dead letters", out)
+
+    def test_clearing_the_mark_takes_it_off(self):
+        self.write("_Main Notes/Peek-lock.md", note("Locks.", ["Service Bus"], type="subtopic", status="unopened",
+                                                     builds_on=["[[Queue]]"]) + shaped(400))
+        _, code = self.run_cli("set", "Peek-lock", "status=")
+        self.assertEqual(code, 0)
+        out, _ = self.run_cli("next", "Service Bus")
+        self.assertNotIn("unopened", out)
+
+    def test_check_takes_unopened_and_refuses_another_subtopic_status(self):
+        self.write("_Main Notes/Peek-lock.md", note("Locks.", ["Service Bus"], type="subtopic", status="unopened",
+                                                     builds_on=["[[Queue]]"]) + shaped(400))
+        self.assertFalse([m for r, m in appledore.check(self.vault())[0] if "status" in m])
+        self.write("_Main Notes/Peek-lock.md", note("Locks.", ["Service Bus"], type="subtopic", status="read",
+                                                     builds_on=["[[Queue]]"]) + shaped(400))
+        self.assertTrue([m for r, m in appledore.check(self.vault())[0] if "status" in m])
+
+
+class TakeOverTests(WriteTest):
+    def setUp(self):
+        super().setUp()
+        # A note promoted at the plan's yes as a take-over, not rewritten yet, and a stub built on it.
+        self.write("_Main Notes/Retries.md", note("How often a message is tried again.", ["Service Bus"],
+                                                   type="subtopic", status="planned", builds_on=["[[Queue]]"])
+                   + "Old bullets without the subtopic's shape.\n")
+        self.write("Stubs/Backoff.md", note("Waiting longer between retries.", ["Service Bus"],
+                                            builds_on=["[[Retries]]"]))
+
+    def test_a_take_over_is_recommended_and_holds_back_what_builds_on_it(self):
+        out, code = self.run_cli("next", "Service Bus")
+        self.assertEqual(code, 0)
+        self.assertIn("recommended: Retries  (take-over)", out)
+        self.assertIn("Backoff  [stub]  Waiting longer between retries.  (waits for: Retries)", out)
+        self.assertIn("2 planned", out)
+
+    def test_a_take_over_is_drawn_and_kept_off_the_shape_check(self):
+        v = self.vault()
+        lines, _ = v.learning_graph(v.get("Service Bus"))
+        self.assertIn("  - [[Retries]] · take-over", lines)
+        warnings = [m for r, m in appledore.check(self.vault())[1] if r.endswith("Retries.md")]
+        self.assertFalse([m for m in warnings if "words" in m or "In short" in m], warnings)
+
+    def test_rewritten_it_counts_as_written(self):
+        self.write("_Main Notes/Retries.md", note("How often a message is tried again.", ["Service Bus"],
+                                                   type="subtopic", builds_on=["[[Queue]]"]) + shaped(300))
+        out, _ = self.run_cli("next", "Service Bus")
+        self.assertIn("recommended: Backoff", out)
+        self.assertNotIn("take-over", out)
+
+    def test_review_doesnt_call_a_topic_finished_while_one_waits(self):
+        self.run_cli("set", "Backoff", "mocs=Queue")  # leave only the take-over planned
+        out, _ = self.run_cli("review", "Service Bus")
+        self.assertNotIn("topics with nothing planned", out)
+
+
+SKILL = Path(__file__).resolve().parent.parent / "skills" / "study"
+
+
+class CardTests(VaultTest):
+    def test_card_names_every_step_and_writing_rule(self):
+        learn, writing = (SKILL / "handover-card.md").read_text(encoding="utf-8").split("## Writing", 1)
+        for n in re.findall(r"^## (\d+)\.", (SKILL / "steps/learn.md").read_text(encoding="utf-8"), re.M):
+            self.assertIn(f"- **{n}. ", learn, f"learn step {n}")
+        for n in re.findall(r"^(\d+)\. \*\*", (SKILL / "writing-rules.md").read_text(encoding="utf-8"), re.M):
+            self.assertIn(f"- **{n}.**", writing, f"writing rule {n}")
+
+    def test_card_prints_the_readme_rules_word_for_word(self):
+        rules = "1. **Folders say a file's kind.** Notes go in `_Main Notes/`.\n2. **No tags.** Use links.\n"
+        self.write("README.md", "---\nsummary: s\n---\n## The rules\n\n" + rules + "\n## Properties\n\nnot this\n")
+        out, code = self.run_cli("card")
+        self.assertEqual(code, 0)
+        self.assertTrue(out.startswith((SKILL / "handover-card.md").read_text(encoding="utf-8").rstrip("\n")))
+        self.assertIn(rules.strip("\n"), out)
+        self.assertNotIn("not this", out)
+
+    def test_card_without_a_rules_section_refuses(self):
+        self.write("README.md", "---\nsummary: s\n---\n## Something else\n")
+        with contextlib.redirect_stderr(io.StringIO()):
+            _, code = self.run_cli("card")
+        self.assertEqual(code, 2)
 
 
 if __name__ == "__main__":

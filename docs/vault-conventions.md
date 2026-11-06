@@ -30,7 +30,7 @@ R is required, O optional, and — not used.
 |---|---|---|---|---|---|---|---|---|
 | `summary` | text | One sentence, at most 25 words | R | R | R | R (the definition) | R (the area) | R (the takeaway) |
 | `type` | text | `topic`, `subtopic` or `note`; only in `_Main Notes/`, where the folder can't tell | R | R | R | — | — | — |
-| `status` | text | Topics: `learning` or `done`. Problems: `solved` or `revisit`. | R | — | — | — | — | R |
+| `status` | text | Topics: `learning` or `done`. Subtopics: `unopened` while written ahead and not yet opened, `planned` while a take-over waits for its rewrite. Problems: `solved` or `revisit`. | R | O (`unopened`, `planned`) | — | — | — | R |
 | `url` | text | The problem's page, and its duplicate check | — | — | — | — | — | R |
 | `difficulty` | text | `easy`, `medium` or `hard` | — | — | — | — | — | R |
 | `mocs` | list of links | Parents, primary first | R | R (the topic) | R | R (one) | R, except roots | R (its patterns) |

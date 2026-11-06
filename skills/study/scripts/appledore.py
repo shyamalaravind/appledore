@@ -3,7 +3,9 @@
 
 Usage: appledore.py [--vault PATH] COMMAND ...
 
-  find QUERY [--kind K] [--body]      notes whose title, aliases or summary match QUERY
+  find QUERY... [--kind K] [--body]   notes whose title, aliases or summary match QUERY; with
+                                      several, each note prints once, its summary cut short
+  card                                the handover card, then the vault README's rules section
   tree [MOC] [--depth N] [--summary] [--mocs]
                                       the MOC chains, from the root MOCs down; --mocs keeps
                                       only the MOCs, the topics and the notes directly under a MOC
@@ -76,10 +78,12 @@ ROOT_TITLES = {"home", "readme"}
 
 # Each kind of note: its folder, the template in TEMPLATES_DIR that `new` makes it from, the
 # properties it must have and the statuses it may have.
+UNOPENED = "unopened"  # a subtopic written ahead that the user hasn't opened yet
+PLANNED = "planned"  # a take-over: a note in the learning graph that waits for its rewrite
 Kind = collections.namedtuple("Kind", "folder template required statuses")
 KINDS = {
     "topic": Kind(NOTES_DIR, "Topic", ("summary", "type", "status", "mocs", "created"), {"learning", "done"}),
-    "subtopic": Kind(NOTES_DIR, "Subtopic", ("summary", "type", "mocs", "builds_on", "created"), set()),
+    "subtopic": Kind(NOTES_DIR, "Subtopic", ("summary", "type", "mocs", "builds_on", "created"), {UNOPENED, PLANNED}),
     "note": Kind(NOTES_DIR, "Note", ("summary", "type", "mocs", "created"), set()),
     "stub": Kind(STUBS_DIR, "Stub", ("summary", "mocs", "created"), set()),
     "moc": Kind(MOCS_DIR, "MOC", ("summary", "created"), set()),
@@ -585,7 +589,8 @@ class Vault:
     def learning_graph(self, topic: Note):
         """The topic's tree as (lines, warnings): each subtopic under its first prerequisite inside the topic."""
         rows, warnings = self.graph_rows(topic)
-        lines = ["  " * level + f"- [[{n.title}]]" + (" · left out" if left else " · stub" if n.kind == "stub" else "")
+        lines = ["  " * level + f"- [[{n.title}]]" + (" · left out" if left else " · stub" if n.kind == "stub"
+                                                      else " · take-over" if n.fm.get("status") == PLANNED else "")
                  for level, n, left in rows]
         return lines, warnings
 
@@ -738,36 +743,53 @@ def drawn_graph(text: str) -> list:
 
 # ---------------------------------------------------------------- commands
 
+FIND_SUMMARY = 60  # characters of each summary a search with several queries prints
+
+
 def norm(s: str) -> str:
     return re.sub(r"[\W_]+", "", s.lower())
 
 
 def cmd_find(vault: Vault, args):
-    query = args.query.strip().lower()
-    terms, nq = query.split(), norm(args.query)
-    hits = []
-    for n in vault.notes:
-        if args.kind and n.kind != args.kind:
-            continue
-        names = [n.title.lower()] + [a.lower() for a in n.aliases]
-        haystack = " ".join(names + [n.summary.lower()])
-        if not terms:
-            score = 1
-        elif query in names or nq in (norm(x) for x in names):
-            score = 100
-        elif any(nq and nq in norm(x) for x in names):
-            score = 60
-        elif all(t in haystack for t in terms):
-            score = 30
-        elif args.body and all(t in n.body.lower() for t in terms):
-            score = 10
-        else:
-            continue
-        hits.append((-score, str(n.rel).lower(), n))
-    if not hits:
+    best = {}  # id(note) -> [score, note, the searches it matched]
+    for raw in args.query:
+        query = raw.strip().lower()
+        terms, nq = query.split(), norm(raw)
+        for n in vault.notes:
+            if args.kind and n.kind != args.kind:
+                continue
+            names = [n.title.lower()] + [a.lower() for a in n.aliases]
+            haystack = " ".join(names + [n.summary.lower()])
+            if not terms:
+                score = 1
+            elif query in names or nq in (norm(x) for x in names):
+                score = 100
+            elif any(nq and nq in norm(x) for x in names):
+                score = 60
+            elif all(t in haystack for t in terms):
+                score = 30
+            elif args.body and all(t in n.body.lower() for t in terms):
+                score = 10
+            else:
+                continue
+            hit = best.setdefault(id(n), [0, n, []])
+            hit[0] = max(hit[0], score)
+            hit[2].append(raw)
+    several = len(args.query) > 1
+    if not best and not several:
         print("no matches")
-    for _, _, n in sorted(hits, key=lambda h: h[:2]):
-        print(f"{n.rel}  [{n.kind}]  {n.summary or '(no summary)'}")
+    for _, n, _ in sorted(best.values(), key=lambda h: (-h[0], str(h[1].rel).lower())):
+        summary = n.summary or "(no summary)"
+        if several:
+            # Several searches are a survey: the title and the start of the summary say whether a
+            # note is worth a closer look, which a single search on its title then gives in full.
+            cut = summary if len(summary) <= FIND_SUMMARY else summary[:FIND_SUMMARY].rstrip() + "…"
+            print(f"{n.title}  [{n.kind}]  {cut}")
+        else:
+            print(f"{n.rel}  [{n.kind}]  {summary}")
+    missing = [q for q in args.query if not any(q in h[2] for h in best.values())]
+    if several and missing:
+        print("no matches: " + ", ".join(missing))
 
 
 def cmd_tree(vault: Vault, args):
@@ -920,23 +942,36 @@ def cmd_next(vault: Vault, args):
     if args.left_out:
         print_left_out(vault, topic, rows)
         return
-    written = [n for _, n, _ in rows if n.kind == "subtopic"]
-    planned = [(level, n) for level, n, left in rows if n.kind == "stub" and not left]
+    takeover = lambda n: n.kind == "subtopic" and n.fm.get("status") == PLANNED  # not rewritten yet
+    written = [n for _, n, _ in rows if n.kind == "subtopic" and not takeover(n)]
+    drawn = {id(n): i for i, (_, n, _) in enumerate(rows)}
+    in_order = lambda pairs: sorted(pairs, key=lambda row: (row[0], drawn[id(row[1])]))  # shallowest, then drawing order
+    unopened = in_order([(level, n) for level, n, left in rows
+                         if not left and n.kind == "subtopic" and n.fm.get("status") == UNOPENED])
+    planned = [(level, n) for level, n, left in rows if (n.kind == "stub" or takeover(n)) and not left]
     left_out = [n for _, n, left in rows if left]
     ready, waiting, ready_rows = [], [], []
     for level, n in planned:
         prereqs = vault.prerequisites(n)
         missing = [p.title if isinstance(p, Note) else "(unresolved)" for p in prereqs
-                   if not isinstance(p, Note) or p.kind == "stub"]
+                   if not isinstance(p, Note) or p.kind == "stub" or takeover(p)]
+        mark = "take-over, " if takeover(n) else ""
         if missing:
-            waiting.append(f"{label(n)}  (waits for: {', '.join(missing)})")
+            waiting.append(f"{label(n)}  ({mark}waits for: {', '.join(missing)})")
         else:
             ready_rows.append((level, n))
-            ready.append(f"{label(n)}  (builds on: {', '.join(p.title for p in prereqs) or 'nothing'})")
-    print(f"{topic.title}: {len(written)} subtopic{'' if len(written) == 1 else 's'} written, "
-          f"{len(planned)} planned, {len(left_out)} left out")
-    if ready_rows:  # the shallowest ready node, ties in drawing order, so "next" never has to ask
-        print(f"recommended: {min(ready_rows, key=lambda row: row[0])[1].title}")
+            ready.append(f"{label(n)}  ({mark}builds on: {', '.join(p.title for p in prereqs) or 'nothing'})")
+    print(f"{topic.title}: {len(written)} subtopic{'' if len(written) == 1 else 's'} written"
+          f"{f' ({len(unopened)} unopened)' if unopened else ''}, {len(planned)} planned, {len(left_out)} left out")
+    # The shallowest node the user hasn't been given, written ahead or ready to write, ties in
+    # drawing order, so "next" never has to ask and never skips a note written ahead.
+    first = in_order(ready_rows + unopened)
+    if first:
+        n = first[0][1]
+        print(f"recommended: {n.title}" + ("  (take-over)" if takeover(n) else "  (unopened)" if n.kind == "subtopic" else ""))
+        if n.kind == "subtopic" and not takeover(n) and ready_rows:  # what a helper writing ahead takes, past the notes it wrote
+            print(f"write next: {in_order(ready_rows)[0][1].title}")
+    section("unopened", [label(n) for _, n in unopened])
     section("ready", ready)
     section("waiting", waiting)
     section("left out", [f"{label(n)}  (left out by: {vault._first_parent(n).title})" for n in left_out])
@@ -1074,7 +1109,7 @@ def check(vault: Vault):
         elif len(vault.children(n)) > MOC_SPLIT_AT:
             warn(n, f"{len(vault.children(n))} children: group some under a MOC beside it")
 
-        if n.kind == "subtopic" and vault.main_subtopic(n) is n:
+        if n.kind == "subtopic" and vault.main_subtopic(n) is n and n.fm.get("status") != PLANNED:
             group = vault.subtopic_notes(n)
             words = sum(g.words() for g in group)
             low, high = SUBTOPIC_WORDS
@@ -2104,7 +2139,7 @@ def cmd_review(vault: Vault, args):
     for topic in reviewed:
         if topic.kind == "topic" and topic.fm.get("status") != "done":
             rows, _ = vault.graph_rows(topic)
-            if not any(n.kind == "stub" and not left for _, n, left in rows):
+            if not any((n.kind == "stub" or n.fm.get("status") in (PLANNED, UNOPENED)) and not left for _, n, left in rows):
                 written = sum(1 for _, n, _ in rows if n.kind == "subtopic")
                 left_out = sum(1 for _, _, left in rows if left)
                 finished.append(f"{topic.title}: {written} subtopic{'' if written == 1 else 's'} written, "
@@ -2208,6 +2243,22 @@ def cmd_commit(vault: Vault, args):
     print(f"pushed {ahead} commit{'' if ahead == 1 else 's'} to {upstream}")
 
 
+def cmd_card(vault: Vault, args):
+    """The handover card, then the vault README's rules word for word, so a new session works from
+    them in place of steps/learn.md, writing-rules.md and the README, and no copy of a vault's rules
+    lives outside the vault."""
+    card = (Path(__file__).resolve().parents[1] / "handover-card.md").read_text(encoding="utf-8")
+    readme = vault.root / "README.md"
+    text = readme.read_text(encoding="utf-8") if readme.is_file() else ""
+    bounds = find_section(text, "The rules")
+    if not bounds:
+        die(f"no ## The rules section in {readme}: read the README itself")
+    print(card.rstrip("\n") + "\n\n## Vault (the README's rules, word for word)\n\n"
+          "`appledore` writes the properties the README's table lists and a subtopic's `status` marks "
+          "(`unopened`, `planned`), and `appledore check` enforces the README's invariants.\n")
+    print(text[bounds[1]:bounds[2]].strip("\n"))
+
+
 def cmd_brief(vault: Vault, args):
     note = vault.get(args.note)
     if note.kind != "subtopic":
@@ -2250,7 +2301,7 @@ def main(argv=None):
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("find", help="notes whose title, aliases or summary match")
-    p.add_argument("query")
+    p.add_argument("query", nargs="+", help="one or more searches; with several, each note prints once")
     p.add_argument("--kind", choices=["topic", "subtopic", "note", "stub", "moc", "problem", "root", "other"])
     p.add_argument("--body", action="store_true", help="also search note bodies")
     p.set_defaults(run=cmd_find)
@@ -2342,12 +2393,18 @@ def main(argv=None):
     message.add_argument("-F", dest="file", metavar="FILE", help="read the message from FILE, or from standard input for -")
     p.set_defaults(run=cmd_commit)
 
+    p = sub.add_parser("card", help="the handover card, then the vault README's rules section word for word")
+    p.set_defaults(run=cmd_card)
+
     p = sub.add_parser("brief", help="the cold reader's brief for a subtopic")
     p.add_argument("note", metavar="subtopic")
     p.set_defaults(run=cmd_brief)
 
     # argparse leaves a key=value after an option such as --dry-run unparsed, so collect it here.
     args, extra = parser.parse_known_args(argv)
+    if extra and args.command == "find" and not any(a.startswith("-") for a in extra):
+        args.query += extra  # a search after an option, as in find 'B-tree' --kind subtopic 'GIN'
+        extra = []
     if extra and not (hasattr(args, "assignments") and all(ASSIGNMENT.match(a) or a == "-" for a in extra)):
         parser.error("unrecognized arguments: " + " ".join(extra))
     if extra:
